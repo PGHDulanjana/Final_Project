@@ -7,13 +7,15 @@ const {
   logout,
   forgotPassword,
   verifyOTP,
-  resetPassword
+  resetPassword,
+  registerAdmin
 } = require('../controllers/authController');
 const { registerValidation, loginValidation } = require('../validations/userValidation');
 const validateRequest = require('../middlewares/validateRequest');
 const authenticate = require('../middlewares/authMiddleware');
 
 router.post('/register', registerValidation, validateRequest, register);
+router.post('/register-admin', registerValidation, validateRequest, registerAdmin);
 router.post('/login', loginValidation, validateRequest, login);
 router.get('/me', authenticate, getMe);
 router.post('/logout', authenticate, logout);

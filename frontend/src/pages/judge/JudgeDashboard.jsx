@@ -7,6 +7,7 @@ import { notificationService } from '../../services/notificationService';
 import { tournamentService } from '../../services/tournamentService';
 import { categoryService } from '../../services/categoryService';
 import { registrationService } from '../../services/registrationService';
+import { judgeService } from '../../services/judgeService';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import Layout from '../../components/Layout';
@@ -47,6 +48,7 @@ const JudgeDashboard = () => {
   const [categories, setCategories] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [selectedTournament, setSelectedTournament] = useState(null);
+  const [judgeProfile, setJudgeProfile] = useState(null);
 
   // UI states
   const [showScoringPanel, setShowScoringPanel] = useState(false);
@@ -77,6 +79,20 @@ const JudgeDashboard = () => {
 
     setLoading(true);
     try {
+      // Get judge profile first
+      let judgeProfileData = null;
+      try {
+        const judgesRes = await judgeService.getJudges();
+        const allJudges = judgesRes.data || [];
+        judgeProfileData = allJudges.find(j => {
+          const judgeUserId = j.user_id?._id || j.user_id;
+          return String(judgeUserId) === String(user._id);
+        });
+        setJudgeProfile(judgeProfileData);
+      } catch (error) {
+        console.error('Error loading judge profile:', error);
+      }
+
       const [matchesRes, scoresRes, notificationsRes, tournamentsRes, categoriesRes, registrationsRes] = await Promise.all([
         matchService.getMatches(),
         scoreService.getScores({ judge_id: user?.judge_id || user?._id }),
@@ -119,16 +135,33 @@ const JudgeDashboard = () => {
 
   const handleRegisterForTournament = async (tournamentId) => {
     try {
+      // Backend finds judge profile by user_id automatically, so we don't need to send judge_id
       await registrationService.registerForTournament({
         tournament_id: tournamentId,
-        registration_type: 'Judge',
-        judge_id: user?.judge_id || user?._id
+        registration_type: 'Judge'
       });
       toast.success('Successfully registered for tournament!');
       loadData();
     } catch (error) {
       console.error('Error registering for tournament:', error);
-      toast.error(error.response?.data?.message || 'Failed to register for tournament');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to register for tournament';
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleLeaveTournament = async (registrationId, tournamentName) => {
+    // Confirm before leaving
+    if (!window.confirm(`Are you sure you want to leave "${tournamentName}"? You will need to register again to be assigned to matches.`)) {
+      return;
+    }
+
+    try {
+      await registrationService.deleteRegistration(registrationId);
+      toast.success('Successfully left tournament');
+      loadData();
+    } catch (error) {
+      console.error('Error leaving tournament:', error);
+      toast.error(error.response?.data?.message || 'Failed to leave tournament');
     }
   };
 
@@ -518,80 +551,194 @@ const JudgeDashboard = () => {
           {activeTab === 'tournaments' && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">Available Tournaments</h2>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">Tournaments</h2>
                 <p className="text-gray-600 mb-6">Register for tournaments to be assigned to matches. View events and matches for each tournament. Registration is FREE for judges.</p>
-                {tournaments.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments Available</h3>
-                    <p className="text-gray-600">No tournaments are currently available for registration</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {tournaments.filter(t => t.status === 'Open' || t.status === 'Ongoing').map((tournament) => {
-                      const isRegistered = registrations.some(r => {
-                        const regTournamentId = r.tournament_id?._id || r.tournament_id;
-                        return (regTournamentId === tournament._id || regTournamentId?.toString() === tournament._id?.toString()) &&
-                               r.registration_type === 'Judge';
-                      });
-                      const tournamentCategories = categories.filter(c => {
-                        const catTournamentId = c.tournament_id?._id || c.tournament_id;
-                        return catTournamentId === tournament._id || catTournamentId?.toString() === tournament._id?.toString();
-                      });
-                      const tournamentMatches = allMatches.filter(m => {
-                        const matchTournamentId = m.tournament_id?._id || m.tournament_id;
-                        return matchTournamentId === tournament._id || matchTournamentId?.toString() === tournament._id?.toString();
-                      });
+                
+                {(() => {
+                  // Get current judge's profile ID
+                  const currentJudgeId = judgeProfile?._id;
+                  
+                  // Filter registrations to only include THIS judge's registrations
+                  // Backend should already filter by judge_id, but add frontend check for safety
+                  const judgeRegistrations = registrations.filter(r => {
+                    // Must be a Judge registration
+                    if (r.registration_type !== 'Judge') return false;
+                    
+                    // If we have judge profile, verify the registration belongs to this judge
+                    if (currentJudgeId) {
+                      const regJudgeId = r.judge_id?._id || r.judge_id;
+                      if (!regJudgeId) return false;
+                      // Match by judge profile ID
+                      return String(regJudgeId) === String(currentJudgeId);
+                    }
+                    
+                    // If no judge profile found, backend filtering should handle it
+                    // But we'll still filter to be safe - only show if judge_id exists
+                    const regJudgeId = r.judge_id?._id || r.judge_id;
+                    return !!regJudgeId; // Backend should have filtered, so if judge_id exists, it's likely for this judge
+                  });
+                  
+                  console.log('Judge dashboard - Filtered registrations:', {
+                    currentJudgeId,
+                    totalRegistrations: registrations.length,
+                    judgeRegistrations: judgeRegistrations.length,
+                    judgeRegDetails: judgeRegistrations.map(r => ({
+                      regId: r._id,
+                      judgeId: r.judge_id?._id || r.judge_id,
+                      tournamentId: r.tournament_id?._id || r.tournament_id,
+                      tournamentName: r.tournament_id?.tournament_name
+                    }))
+                  });
+                  
+                  // Get tournament IDs where THIS judge is registered
+                  const registeredTournamentIds = new Set(
+                    judgeRegistrations.map(r => {
+                      const regTournamentId = r.tournament_id?._id || r.tournament_id;
+                      return regTournamentId ? String(regTournamentId) : null;
+                    }).filter(id => id !== null)
+                  );
+                  
+                  // Show all tournaments (regardless of status)
+                  // Backend will validate if tournament is open for registration
+                  const allAvailableTournaments = tournaments;
+                  
+                  // Split tournaments into registered and available
+                  const registeredTournaments = allAvailableTournaments.filter(t => 
+                    registeredTournamentIds.has(String(t._id))
+                  );
+                  const unregisteredTournaments = allAvailableTournaments.filter(t => 
+                    !registeredTournamentIds.has(String(t._id))
+                  );
+                  
+                  const TournamentCard = ({ tournament, isRegistered, registration }) => {
+                    const tournamentCategories = categories.filter(c => {
+                      const catTournamentId = c.tournament_id?._id || c.tournament_id;
+                      return catTournamentId === tournament._id || catTournamentId?.toString() === tournament._id?.toString();
+                    });
+                    const tournamentMatches = allMatches.filter(m => {
+                      const matchTournamentId = m.tournament_id?._id || m.tournament_id;
+                      return matchTournamentId === tournament._id || matchTournamentId?.toString() === tournament._id?.toString();
+                    });
 
-                      return (
-                        <div key={tournament._id} className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition bg-white">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <h3 className="font-bold text-lg text-gray-800 mb-1">{tournament.tournament_name}</h3>
-                              <p className="text-sm text-gray-600">
-                                {format(new Date(tournament.start_date), 'MMM dd, yyyy')} - {format(new Date(tournament.end_date), 'MMM dd, yyyy')}
-                              </p>
-                            </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-                              tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {tournament.status}
-                            </span>
-                          </div>
-                          <div className="space-y-2 mb-4">
+                    return (
+                      <div className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition bg-white">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-lg text-gray-800 mb-1">{tournament.tournament_name}</h3>
                             <p className="text-sm text-gray-600">
-                              <span className="font-semibold">Events:</span> {tournamentCategories.length}
+                              {format(new Date(tournament.start_date), 'MMM dd, yyyy')} - {format(new Date(tournament.end_date), 'MMM dd, yyyy')}
                             </p>
-                            <p className="text-sm text-gray-600">
-                              <span className="font-semibold">Matches:</span> {tournamentMatches.length}
-                            </p>
-                            {isRegistered && (
-                              <span className="inline-block px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                                Registered (FREE)
-                              </span>
-                            )}
                           </div>
-                          {!isRegistered && tournament.status === 'Open' && (
-                            <button
-                              onClick={() => handleRegisterForTournament(tournament._id)}
-                              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
-                            >
-                              Register for Tournament (FREE)
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setSelectedTournament(tournament)}
-                            className="w-full mt-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition text-sm font-semibold"
-                          >
-                            View Details
-                          </button>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+                            tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {tournament.status}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="space-y-2 mb-4">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-semibold">Events:</span> {tournamentCategories.length}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            <span className="font-semibold">Matches:</span> {tournamentMatches.length}
+                          </p>
+                          {isRegistered && (
+                            <span className="inline-block px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                              ✓ Registered (FREE)
+                            </span>
+                          )}
+                        </div>
+                        {!isRegistered && (
+                          <button
+                            onClick={() => handleRegisterForTournament(tournament._id)}
+                            className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={tournament.status !== 'Open'}
+                            title={tournament.status !== 'Open' ? 'Tournament is not open for registration' : 'Register for Tournament (FREE)'}
+                          >
+                            {tournament.status === 'Open' ? 'Register for Tournament (FREE)' : 'Registration Closed'}
+                          </button>
+                        )}
+                        {isRegistered && registration && (
+                          <button
+                            onClick={() => handleLeaveTournament(registration._id, tournament.tournament_name)}
+                            className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm font-semibold mb-2"
+                          >
+                            Leave Tournament
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedTournament(tournament)}
+                          className={`w-full ${(!isRegistered && tournament.status === 'Open') || (isRegistered && registration) ? 'mt-2' : ''} border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition text-sm font-semibold`}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    );
+                  };
+                  
+                  return (
+                    <>
+                      {/* Registered Tournaments Section */}
+                      {registeredTournaments.length > 0 && (
+                        <div className="mb-8">
+                          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <FiCheckCircle className="w-5 h-5 text-green-600" />
+                            Registered Tournaments ({registeredTournaments.length})
+                          </h3>
+                          <p className="text-gray-600 mb-4 text-sm">Tournaments you have registered for. You can view events and matches, and be assigned to judge matches.</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {registeredTournaments.map((tournament) => {
+                              const registration = judgeRegistrations.find(r => {
+                                const regTournamentId = r.tournament_id?._id || r.tournament_id;
+                                return regTournamentId === tournament._id || regTournamentId?.toString() === tournament._id?.toString();
+                              });
+                              return (
+                                <TournamentCard
+                                  key={tournament._id}
+                                  tournament={tournament}
+                                  isRegistered={true}
+                                  registration={registration}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Available Tournaments Section */}
+                      {unregisteredTournaments.length > 0 && (
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                            <FiAward className="w-5 h-5 text-blue-600" />
+                            Available Tournaments ({unregisteredTournaments.length})
+                          </h3>
+                          <p className="text-gray-600 mb-4 text-sm">Tournaments available for registration. Register to view events and matches, and be assigned to judge matches.</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {unregisteredTournaments.map((tournament) => (
+                              <TournamentCard
+                                key={tournament._id}
+                                tournament={tournament}
+                                isRegistered={false}
+                                registration={null}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Empty State */}
+                      {registeredTournaments.length === 0 && unregisteredTournaments.length === 0 && (
+                        <div className="text-center py-12">
+                          <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments Available</h3>
+                          <p className="text-gray-600">No tournaments are currently available for registration</p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Tournament Details Modal */}

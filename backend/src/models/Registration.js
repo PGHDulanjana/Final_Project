@@ -66,9 +66,38 @@ const registrationSchema = new mongoose.Schema({
 });
 
 // Ensure unique registration per player/coach/judge per tournament
-registrationSchema.index({ tournament_id: 1, player_id: 1 }, { unique: true, sparse: true });
+// For Individual registrations: unique per tournament + category + player (allows multiple events)
+registrationSchema.index({ tournament_id: 1, category_id: 1, player_id: 1 }, { unique: true, sparse: true });
+// For Team registrations: unique per tournament + category + team
+registrationSchema.index({ tournament_id: 1, category_id: 1, team_id: 1 }, { unique: true, sparse: true });
+// For Coach registrations: unique per tournament (coaches register for tournament, not specific events)
 registrationSchema.index({ tournament_id: 1, coach_id: 1 }, { unique: true, sparse: true });
+// For Judge registrations: unique per tournament (judges register for tournament, not specific events)
 registrationSchema.index({ tournament_id: 1, judge_id: 1 }, { unique: true, sparse: true });
 
-module.exports = mongoose.model('Registration', registrationSchema);
+const Registration = mongoose.model('Registration', registrationSchema);
+
+// Helper function to drop old indexes (call this on server startup)
+Registration.dropOldIndexes = async function() {
+  try {
+    const collection = this.collection;
+    const indexes = await collection.indexes();
+    const oldIndexName = 'tournament_id_1_player_id_1';
+    
+    // Check if old index exists
+    const oldIndex = indexes.find(idx => idx.name === oldIndexName);
+    if (oldIndex) {
+      console.log(`🔄 Dropping old index: ${oldIndexName}`);
+      await collection.dropIndex(oldIndexName);
+      console.log(`✅ Successfully dropped old index: ${oldIndexName}`);
+    }
+  } catch (error) {
+    // Ignore errors if index doesn't exist (code 27) or namespace not found (code 85)
+    if (error.code !== 27 && error.code !== 85) {
+      console.warn(`⚠️  Could not drop old index: ${error.message}`);
+    }
+  }
+};
+
+module.exports = Registration;
 

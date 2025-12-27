@@ -1,7 +1,12 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-export const BASE_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+// Calculate BASE_URL safely to avoid const reassignment errors
+const envApiUrl = import.meta.env.VITE_API_URL;
+const calculatedBaseUrl = envApiUrl && envApiUrl.includes('/api') 
+  ? envApiUrl.replace('/api', '') 
+  : (envApiUrl || 'http://localhost:5000');
+export const BASE_URL = calculatedBaseUrl;
 
 const api = axios.create({
   baseURL: API_URL,

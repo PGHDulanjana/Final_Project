@@ -6,6 +6,7 @@ import { registrationService } from '../../services/registrationService';
 import { matchService } from '../../services/matchService';
 import { scoreService } from '../../services/scoreService';
 import { notificationService } from '../../services/notificationService';
+import { playerService } from '../../services/playerService';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import Layout from '../../components/Layout';
@@ -39,6 +40,7 @@ const PlayerDashboard = () => {
   const [scores, setScores] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [playerMatches, setPlayerMatches] = useState([]);
+  const [playerProfile, setPlayerProfile] = useState(null);
   const [performanceData, setPerformanceData] = useState({
     totalMatches: 0,
     wins: 0,
@@ -59,19 +61,41 @@ const PlayerDashboard = () => {
   }, [user]);
 
   const loadData = async () => {
+    if (!user?._id) return;
+    
     try {
       setLoading(true);
       
+      // Get player profile to find coach
+      let playerProfileData = null;
+      try {
+        const playersRes = await playerService.getPlayers();
+        const allPlayers = playersRes.data || [];
+        playerProfileData = allPlayers.find(p => {
+          const playerUserId = p.user_id?._id || p.user_id;
+          return String(playerUserId) === String(user._id);
+        });
+        setPlayerProfile(playerProfileData);
+      } catch (error) {
+        console.error('Error loading player profile:', error);
+      }
+      
       const [tournamentsRes, registrationsRes, matchesRes, scoresRes, notificationsRes] = await Promise.all([
-        tournamentService.getTournaments(), // Get all tournaments to show registered events
+        tournamentService.getTournaments(),
         registrationService.getRegistrations(),
         matchService.getMatches(),
         scoreService.getScores(),
         notificationService.getNotifications({ user_id: user._id, unread_only: true })
       ]);
 
-      setTournaments(tournamentsRes.data || []);
-      setRegistrations(registrationsRes.data || []);
+      const allTournaments = tournamentsRes.data || [];
+      const allRegistrations = registrationsRes.data || [];
+      
+      // Show all tournaments created by organizers (not filtered by coach registration)
+      // Players can see all tournaments, but can only register for events in tournaments where their coach is registered
+      setTournaments(allTournaments);
+      
+      setRegistrations(allRegistrations);
       setMatches(matchesRes.data || []);
       setScores(scoresRes.data || []);
       setNotifications(notificationsRes.data || []);
@@ -264,103 +288,139 @@ const PlayerDashboard = () => {
           {/* My Events Tab - Show Registered Events */}
           {activeTab === 'events' && (
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">My Registered Events</h2>
-              <p className="text-gray-600 mb-6">
-                Events you are registered for (registered by your coach after payment)
-              </p>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">My Events</h2>
+                  <p className="text-gray-600">
+                    All tournaments and events. You can register for events in tournaments where your coach is registered.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/player/tournaments')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                >
+                  <FiAward className="w-5 h-5" />
+                  View All Tournaments
+                </button>
+              </div>
 
-              {registrations.length === 0 ? (
+              {tournaments.length === 0 ? (
                 <div className="text-center py-12">
                   <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">No Registered Events</h3>
-                  <p className="text-gray-600">
-                    You haven't been registered for any events yet. Your coach will register you after payment.
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments Available</h3>
+                  <p className="text-gray-600 mb-4">
+                    No tournaments have been created yet. Check back later for upcoming tournaments.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {tournaments.filter(t => {
-                    return registrations.some(r => {
-                      const regTournamentId = r.tournament_id?._id || r.tournament_id;
-                      return regTournamentId === t._id || regTournamentId?.toString() === t._id?.toString();
-                    });
-                  }).map((tournament) => {
+                  {tournaments.map((tournament) => {
                     const tournamentRegistrations = registrations.filter(r => {
                       const regTournamentId = r.tournament_id?._id || r.tournament_id;
-                      return regTournamentId === tournament._id || regTournamentId?.toString() === tournament._id?.toString();
+                      const regPlayerId = r.player_id?._id || r.player_id;
+                      const playerId = playerProfile?._id;
+                      return (regTournamentId === tournament._id || regTournamentId?.toString() === tournament._id?.toString()) &&
+                             (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                             r.registration_type === 'Individual';
                     });
 
                     return (
                       <div key={tournament._id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                         <div className="flex justify-between items-center mb-4">
-                          <div>
+                          <div className="flex-1">
                             <h4 className="font-bold text-lg text-gray-800">{tournament.tournament_name}</h4>
                             <p className="text-sm text-gray-600 mt-1">
                               {format(new Date(tournament.start_date), 'MMM dd, yyyy')} - {format(new Date(tournament.end_date), 'MMM dd, yyyy')}
                             </p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-                            tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {tournament.status}
-                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+                              tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {tournament.status}
+                            </span>
+                            <button
+                              onClick={() => setSelectedTournamentId(tournament._id)}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex items-center gap-2"
+                            >
+                              <FiEye className="w-4 h-4" />
+                              View Events
+                            </button>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {tournamentRegistrations.map((registration) => {
-                            const category = registration.category_id || {};
-                            const isIndividual = registration.registration_type === 'Individual';
-                            
-                            return (
-                              <div
-                                key={registration._id}
-                                className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition"
-                              >
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="flex-1">
-                                    <h5 className="font-semibold text-gray-800 mb-1">{category.category_name || 'Event'}</h5>
-                                    <div className="flex items-center gap-2 mb-2">
+                        {tournamentRegistrations.length > 0 && (
+                          <div className="mt-4">
+                            <h5 className="text-sm font-semibold text-gray-700 mb-2">Your Registered Events ({tournamentRegistrations.length})</h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {tournamentRegistrations.map((registration) => {
+                                const category = registration.category_id || {};
+                                const isIndividual = registration.registration_type === 'Individual';
+                                
+                                return (
+                                  <div
+                                    key={registration._id}
+                                    className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition"
+                                  >
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div className="flex-1">
+                                        <h5 className="font-semibold text-gray-800 mb-1">{category.category_name || 'Event'}</h5>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                            category.category_type === 'Kata' || category.category_type === 'Team Kata'
+                                              ? 'bg-blue-100 text-blue-700'
+                                              : 'bg-red-100 text-red-700'
+                                          }`}>
+                                            {category.category_type || 'Event'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="text-xs text-gray-600 space-y-1 mb-3">
+                                      {category.age_category && <p><span className="font-medium">Age:</span> {category.age_category}</p>}
+                                      {category.belt_category && <p><span className="font-medium">Belt:</span> {category.belt_category}</p>}
+                                      {category.weight_category && <p><span className="font-medium">Weight:</span> {category.weight_category}</p>}
+                                    </div>
+                                    <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                                       <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        category.category_type === 'Kata' || category.category_type === 'Team Kata'
-                                          ? 'bg-blue-100 text-blue-700'
+                                        registration.approval_status === 'Approved' 
+                                          ? 'bg-green-100 text-green-700'
+                                          : registration.approval_status === 'Pending'
+                                          ? 'bg-yellow-100 text-yellow-700'
                                           : 'bg-red-100 text-red-700'
                                       }`}>
-                                        {category.category_type || 'Event'}
+                                        {registration.approval_status}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                        registration.payment_status === 'Paid'
+                                          ? 'bg-green-100 text-green-700'
+                                          : 'bg-yellow-100 text-yellow-700'
+                                      }`}>
+                                        {registration.payment_status === 'Paid' ? 'Paid' : 'Payment Pending'}
                                       </span>
                                     </div>
                                   </div>
-                                </div>
-                                <div className="text-xs text-gray-600 space-y-1 mb-3">
-                                  {category.age_category && <p><span className="font-medium">Age:</span> {category.age_category}</p>}
-                                  {category.belt_category && <p><span className="font-medium">Belt:</span> {category.belt_category}</p>}
-                                  {category.weight_category && <p><span className="font-medium">Weight:</span> {category.weight_category}</p>}
-                                </div>
-                                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                                  <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                    registration.approval_status === 'Approved' 
-                                      ? 'bg-green-100 text-green-700'
-                                      : registration.approval_status === 'Pending'
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {registration.approval_status}
-                                  </span>
-                                  <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                    registration.payment_status === 'Paid'
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-yellow-100 text-yellow-700'
-                                  }`}>
-                                    {registration.payment_status === 'Paid' ? 'Paid' : 'Payment Pending'}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {tournaments.length > 0 && registrations.filter(r => {
+                const regPlayerId = r.player_id?._id || r.player_id;
+                const playerId = playerProfile?._id;
+                return (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                       r.registration_type === 'Individual';
+              }).length === 0 && (
+                <div className="text-center py-8 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-gray-700 mb-4">
+                    You haven't registered for any events yet. Click "View Events" on any tournament above to see available events and register.
+                  </p>
                 </div>
               )}
             </div>

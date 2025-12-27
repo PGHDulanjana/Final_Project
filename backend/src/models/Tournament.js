@@ -53,6 +53,32 @@ const tournamentSchema = new mongoose.Schema({
   registration_deadline: {
     type: Date,
     required: true
+  },
+  // Bank account details for organizer
+  bank_account_holder_name: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+  bank_name: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+  bank_account_number: {
+    type: String,
+    trim: true,
+    maxlength: 50
+  },
+  bank_branch: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+  bank_swift_code: {
+    type: String,
+    trim: true,
+    maxlength: 20
   }
 }, {
   timestamps: true

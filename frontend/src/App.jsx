@@ -18,6 +18,7 @@ import PlayerResults from './pages/player/PlayerResults';
 import PlayerMatches from './pages/player/PlayerMatches';
 import PlayerPerformance from './pages/player/PlayerPerformance';
 import PlayerPayments from './pages/player/Payments';
+import PlayerProfile from './pages/player/PlayerProfile';
 import Notifications from './pages/player/Notifications';
 import CoachNotifications from './pages/coach/Notifications';
 import JudgeDashboard from './pages/judge/JudgeDashboard';
@@ -38,6 +39,7 @@ import OrganizerSchedule from './pages/organizer/OrganizerSchedule';
 import OrganizerPayments from './pages/organizer/Payments';
 import CategoryManagement from './pages/organizer/CategoryManagement';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminRegister from './pages/admin/AdminRegister';
 import UserManagement from './pages/admin/UserManagement';
 import AdminTournaments from './pages/admin/AdminTournaments';
 import Analytics from './pages/admin/Analytics';
@@ -90,6 +92,7 @@ const AppRoutes = () => {
       {/* Public Routes */}
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} />
       <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to="/dashboard" />} />
+      <Route path="/admin/register" element={!isAuthenticated ? <AdminRegister /> : <Navigate to="/dashboard" />} />
       <Route path="/forgot-password" element={!isAuthenticated ? <ForgotPassword /> : <Navigate to="/dashboard" />} />
       <Route path="/reset-password" element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/dashboard" />} />
       <Route path="/payment/success" element={<PaymentSuccess />} />
@@ -147,6 +150,15 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['Player']}>
             <PlayerPerformance />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/player/profile"
+        element={
+          <ProtectedRoute allowedRoles={['Player']}>
+            <PlayerProfile />
           </ProtectedRoute>
         }
       />

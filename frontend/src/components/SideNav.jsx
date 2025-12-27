@@ -54,6 +54,8 @@ const SideNav = ({ role }) => {
       { icon: FiSettings, label: 'Settings', path: '/admin/settings' }
     ],
     Player: [
+      { icon: FiUser, label: 'My Profile', path: '/player/profile' },
+      { icon: FiAward, label: 'Tournaments', path: '/player/tournaments' },
       { icon: FiZap, label: 'My Matches', path: '/player/matches' },
       { icon: FiCheckCircle, label: 'My Results', path: '/player/results' },
       {

@@ -24,5 +24,11 @@ export const paymentService = {
     const response = await api.put(`/payments/${id}`, paymentData);
     return response.data;
   },
+
+  // TEMPORARY: Complete fake payment (for testing)
+  completeFakePayment: async (paymentId) => {
+    const response = await api.post(`/payments/${paymentId}/complete-fake`);
+    return response.data;
+  },
 };
 

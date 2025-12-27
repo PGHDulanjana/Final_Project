@@ -3,6 +3,7 @@ import { tournamentService } from '../../services/tournamentService';
 import { registrationService } from '../../services/registrationService';
 import { paymentService } from '../../services/paymentService';
 import { categoryService } from '../../services/categoryService';
+import { playerService } from '../../services/playerService';
 import { processPayHerePayment, extractCustomerInfo } from '../../utils/payhere';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
@@ -19,8 +20,10 @@ const PlayerTournaments = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [tournaments, setTournaments] = useState([]);
+  const [allTournaments, setAllTournaments] = useState([]); // Store all tournaments
   const [categories, setCategories] = useState([]);
   const [registrations, setRegistrations] = useState([]);
+  const [playerProfile, setPlayerProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(null);
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
@@ -29,10 +32,26 @@ const PlayerTournaments = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user]);
 
   const loadData = async () => {
+    if (!user?._id) return;
+    
     try {
+      // Get player profile to find coach
+      let playerProfileData = null;
+      try {
+        const playersRes = await playerService.getPlayers();
+        const allPlayers = playersRes.data || [];
+        playerProfileData = allPlayers.find(p => {
+          const playerUserId = p.user_id?._id || p.user_id;
+          return String(playerUserId) === String(user._id);
+        });
+        setPlayerProfile(playerProfileData);
+      } catch (error) {
+        console.error('Error loading player profile:', error);
+      }
+
       const [tournamentsRes, registrationsRes, categoriesRes] = await Promise.all([
         tournamentService.getTournaments(),
         registrationService.getRegistrations(),
@@ -42,10 +61,13 @@ const PlayerTournaments = () => {
       const tournamentsData = tournamentsRes.data || [];
       const registrationsData = registrationsRes.data || [];
       
-      
-      setTournaments(tournamentsData);
+      setAllTournaments(tournamentsData);
       setRegistrations(registrationsData);
       setCategories(categoriesRes.data || []);
+
+      // Show all tournaments created by organizers
+      // Players can see all tournaments, but can only register for events in tournaments where their coach is registered
+      setTournaments(tournamentsData);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load tournaments');
@@ -320,7 +342,9 @@ const PlayerTournaments = () => {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
               My Tournaments
             </h1>
-            <p className="text-gray-600">View and manage your tournament registrations</p>
+            <p className="text-gray-600">
+              All tournaments and events. You can view all tournaments, but can only register for events in tournaments where your coach is registered.
+            </p>
           </div>
 
           {/* Stats Cards */}
@@ -513,39 +537,13 @@ const PlayerTournaments = () => {
                           </svg>
                           View Details
                         </button>
-                        {status === 'Upcoming' && user?.user_type === 'Player' && (
-                          <button 
-                            onClick={() => handleRegister(tournament._id)}
-                            disabled={registering === tournament._id}
-                            className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition duration-200 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Register for this tournament"
-                          >
-                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                            </svg>
-                            {registering === tournament._id ? 'Registering...' : 'Register Now'}
-                          </button>
-                        )}
-                        {status === 'Upcoming' && user?.user_type !== 'Player' && (
-                          <span className="px-4 py-2 bg-gray-300 text-gray-600 rounded-lg text-sm">
-                            Only players can register
-                          </span>
-                        )}
                         {status === 'Registered' && registration && (
                           <>
                             {registration.payment_status !== 'Paid' && (
-                              <button 
-                                onClick={() => {
-                                  setSelectedRegistration(registration);
-                                  setShowPaymentModal(true);
-                                }}
-                                className="px-4 py-2 bg-gradient-to-r from-yellow-600 to-orange-600 text-white rounded-lg hover:from-yellow-700 hover:to-orange-700 transition duration-200 flex items-center"
-                              >
-                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                                Pay Fee
-                              </button>
+                              <div className="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                                <p className="font-semibold">Payment Pending</p>
+                                <p className="text-xs mt-1">Complete your payment to finalize registration</p>
+                              </div>
                             )}
                             <button 
                               onClick={() => handleCancelRegistration(registration._id)}
@@ -572,21 +570,40 @@ const PlayerTournaments = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
               <h3 className="text-xl font-bold text-gray-800 mb-2">No Tournaments Found</h3>
-              <p className="text-gray-600 mb-4">
-                {filterStatus === 'registered' 
-                  ? 'You haven\'t registered for any tournaments yet.' 
-                  : 'No tournaments match your current filter criteria.'}
-              </p>
-              {filterStatus === 'registered' && (
-                <button
-                  onClick={() => {
-                    setFilterStatus('upcoming');
-                    setSearchTerm('');
-                  }}
-                  className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition"
-                >
-                  Browse Upcoming Tournaments
-                </button>
+              {filterStatus === 'registered' ? (
+                <div>
+                  <p className="text-gray-600 mb-4">
+                    You haven't registered for any events yet.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setFilterStatus('all');
+                      setSearchTerm('');
+                    }}
+                    className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition"
+                  >
+                    Browse All Tournaments
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-gray-600 mb-2">
+                    No tournaments found matching your search criteria.
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {!playerProfile || !playerProfile.coach_id 
+                      ? 'You can view all tournaments, but need a coach assigned to register for events. Please contact support to assign a coach.'
+                      : 'You can view all tournaments. To register for events, your coach must first register for the tournament.'}
+                  </p>
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}

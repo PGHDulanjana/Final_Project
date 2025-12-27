@@ -85,9 +85,27 @@ const Login = () => {
       const result = await login(formData.email, formData.password_hash);
       
       if (result && result.success) {
-        // Small delay to show success message
+        // Small delay to show success message, then redirect based on user type
         setTimeout(() => {
-          navigate('/dashboard');
+          // Get user data from localStorage (set by login function)
+          const userData = JSON.parse(localStorage.getItem('user') || '{}');
+          const userType = userData?.user_type;
+          
+          // Redirect based on user type
+          if (userType === 'Admin') {
+            navigate('/admin/dashboard');
+          } else if (userType === 'Player') {
+            navigate('/player/matches');
+          } else if (userType === 'Coach') {
+            navigate('/coach/dashboard');
+          } else if (userType === 'Judge') {
+            navigate('/judge/dashboard');
+          } else if (userType === 'Organizer') {
+            navigate('/organizer/dashboard');
+          } else {
+            // Fallback to general dashboard (which will redirect based on user type)
+            navigate('/dashboard');
+          }
         }, 500);
       } else {
         // Error already shown by login function
@@ -182,11 +200,17 @@ const Login = () => {
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-2">
           <p className="text-sm text-gray-600">
             Don't have an account?{' '}
             <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
               Register here
+            </Link>
+          </p>
+          <p className="text-sm text-gray-600">
+            Need to create an admin account?{' '}
+            <Link to="/admin/register" className="text-red-600 hover:text-red-700 font-medium">
+              Admin Registration
             </Link>
           </p>
         </div>

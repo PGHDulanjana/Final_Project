@@ -28,7 +28,12 @@ const CreateTournamentModal = ({ onClose, onSuccess, tournament = null }) => {
     registration_deadline: '',
     rules: '',
     max_participants: '',
-    status: 'Draft'
+    status: 'Draft',
+    bank_account_holder_name: '',
+    bank_name: '',
+    bank_account_number: '',
+    bank_branch: '',
+    bank_swift_code: ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -46,7 +51,12 @@ const CreateTournamentModal = ({ onClose, onSuccess, tournament = null }) => {
         registration_deadline: formatDateForInput(tournament.registration_deadline),
         rules: tournament.rules || '',
         max_participants: tournament.max_participants || '',
-        status: tournament.status || 'Draft'
+        status: tournament.status || 'Draft',
+        bank_account_holder_name: tournament.bank_account_holder_name || '',
+        bank_name: tournament.bank_name || '',
+        bank_account_number: tournament.bank_account_number || '',
+        bank_branch: tournament.bank_branch || '',
+        bank_swift_code: tournament.bank_swift_code || ''
       });
     }
   }, [tournament]);
@@ -369,6 +379,96 @@ const CreateTournamentModal = ({ onClose, onSuccess, tournament = null }) => {
                 placeholder="Enter tournament rules and regulations"
                 maxLength={5000}
               />
+            </div>
+
+            {/* Bank Account Details Section */}
+            <div className="md:col-span-2 mt-4 pt-4 border-t border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Bank Account Details (Optional)</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Add your bank account details to display payment information to participants.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Account Holder Name */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Account Holder Name
+                  </label>
+                  <input
+                    type="text"
+                    name="bank_account_holder_name"
+                    value={formData.bank_account_holder_name}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter account holder name"
+                    maxLength={200}
+                  />
+                </div>
+
+                {/* Bank Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    name="bank_name"
+                    value={formData.bank_name}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter bank name"
+                    maxLength={200}
+                  />
+                </div>
+
+                {/* Account Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Account Number
+                  </label>
+                  <input
+                    type="text"
+                    name="bank_account_number"
+                    value={formData.bank_account_number}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter account number"
+                    maxLength={50}
+                  />
+                </div>
+
+                {/* Branch */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Branch
+                  </label>
+                  <input
+                    type="text"
+                    name="bank_branch"
+                    value={formData.bank_branch}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter branch name"
+                    maxLength={200}
+                  />
+                </div>
+
+                {/* SWIFT Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    SWIFT Code (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="bank_swift_code"
+                    value={formData.bank_swift_code}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter SWIFT code"
+                    maxLength={20}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 

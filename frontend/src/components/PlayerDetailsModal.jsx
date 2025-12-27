@@ -7,6 +7,7 @@ import { getWeightClasses } from '../utils/kumiteClasses';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import { FiX, FiEdit, FiTarget } from 'react-icons/fi';
+import PayHerePaymentModal from './PayHerePaymentModal';
 
 const PlayerDetailsModal = ({ 
   player, 
@@ -19,12 +20,20 @@ const PlayerDetailsModal = ({
   onMakePayment,
   user
 }) => {
-  const [activeSection, setActiveSection] = useState('details'); // 'details', 'events'
+  // Add effect to update playerRegistrations when registrations prop changes
+  useEffect(() => {
+    // This will automatically update when parent refreshes registrations
+  }, [registrations]);
+  const [activeSection, setActiveSection] = useState('details'); // 'details', 'registrations'
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [pendingRegistration, setPendingRegistration] = useState(null);
+  const [pendingCategory, setPendingCategory] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState(player); // Track current player data
+  const [recentRegistrations, setRecentRegistrations] = useState([]); // Track recent registrations to prevent duplicates
   const [formData, setFormData] = useState({
     age: player.age || '',
     belt_rank: player.belt_rank || '',
@@ -63,16 +72,55 @@ const PlayerDetailsModal = ({
   const playerUser = currentPlayer.user_id || {};
   const playerRegistrations = registrations.filter(r => {
     const regPlayerId = r.player_id?._id || r.player_id;
-    return regPlayerId === currentPlayer._id || regPlayerId?.toString() === currentPlayer._id?.toString();
+    const playerIdStr = String(currentPlayer._id);
+    const regPlayerIdStr = String(regPlayerId || '');
+    return regPlayerIdStr === playerIdStr && r.registration_type === 'Individual';
   });
 
   // Get coach registrations to filter tournaments - only show tournaments where THIS coach is registered
-  // Filter by current coach's coach_id to avoid showing tournaments registered by other coaches
+  // Use the same logic as CoachDashboard to match coach registrations
   const currentCoachId = user?.coach_id;
+  const currentUserId = user?._id;
+  
   const coachRegistrations = registrations.filter(r => {
     if (r.registration_type !== 'Coach') return false;
+    
+    // Check by coach_id (can be populated object or ID string)
     const regCoachId = r.coach_id?._id || r.coach_id;
-    return regCoachId && currentCoachId && (String(regCoachId) === String(currentCoachId));
+    
+    // Match by coach_id if available
+    if (regCoachId && currentCoachId) {
+      const regCoachIdStr = String(regCoachId).trim();
+      const currentCoachIdStr = String(currentCoachId).trim();
+      if (regCoachIdStr === currentCoachIdStr) {
+        return true;
+      }
+    }
+    
+    // Also check if the registration's coach has the same user_id as current user
+    // This handles cases where coach_id might be populated with user_id structure
+    if (r.coach_id?.user_id) {
+      const regCoachUserId = r.coach_id.user_id?._id || r.coach_id.user_id;
+      if (regCoachUserId && currentUserId) {
+        const regCoachUserIdStr = String(regCoachUserId).trim();
+        const currentUserIdStr = String(currentUserId).trim();
+        if (regCoachUserIdStr === currentUserIdStr) {
+          return true;
+        }
+      }
+    }
+    
+    // Fallback: if coach_id is not populated but we have user_id match
+    // This handles edge cases where the structure might be different
+    if (!regCoachId && r.coach_id && typeof r.coach_id === 'object') {
+      // Try to extract user_id from nested structure
+      const nestedUserId = r.coach_id.user_id?._id || r.coach_id.user_id;
+      if (nestedUserId && currentUserId && String(nestedUserId) === String(currentUserId)) {
+        return true;
+      }
+    }
+    
+    return false;
   });
   
   // Get tournament IDs where coach is registered
@@ -88,6 +136,7 @@ const PlayerDetailsModal = ({
     const tournamentId = String(t._id);
     return coachRegisteredTournamentIds.has(tournamentId);
   });
+  
 
   const handleSaveDetails = async (e) => {
     e.preventDefault();
@@ -164,56 +213,197 @@ const PlayerDetailsModal = ({
   };
 
   const handleRegisterForEvent = async (categoryId, tournamentId) => {
+    // Only coaches can register players for events
+    if (!user || user.user_type !== 'Coach') {
+      toast.error('Only coaches can register players for events');
+      return;
+    }
+    
     setRegistering(true);
+    
+    // Find category to get fee (defined outside try block for use in catch)
+    const category = categories.find(c => 
+      c._id === categoryId || c._id?.toString() === categoryId?.toString()
+    );
+    
     try {
-      // Find category to get fee
-      const category = categories.find(c => 
-        c._id === categoryId || c._id?.toString() === categoryId?.toString()
-      );
-      
       if (!category) {
         toast.error('Event not found');
+        setRegistering(false);
         return;
       }
 
-      const fee = category.individual_player_fee || 0;
+      // Check for duplicate registration - but allow if payment is Pending or Failed
+      const tournamentIdStr = String(tournamentId);
+      const categoryIdStr = String(categoryId);
+      const playerIdStr = String(currentPlayer._id);
       
-      // Create payment first (registration will be created automatically after successful payment)
-      const paymentRes = await paymentService.createPayment({
+      // Check in playerRegistrations (filtered by player)
+      const existingInPlayerRegs = playerRegistrations.find(r => {
+        const regTournamentId = String(r.tournament_id?._id || r.tournament_id);
+        const regCategoryId = String(r.category_id?._id || r.category_id);
+        
+        return regTournamentId === tournamentIdStr &&
+               regCategoryId === categoryIdStr &&
+               r.registration_type === 'Individual';
+      });
+
+      // Check in all registrations (broader check)
+      const existingInAllRegs = registrations.find(r => {
+        const regPlayerId = String(r.player_id?._id || r.player_id);
+        const regTournamentId = String(r.tournament_id?._id || r.tournament_id);
+        const regCategoryId = String(r.category_id?._id || r.category_id);
+        
+        return regPlayerId === playerIdStr &&
+               regTournamentId === tournamentIdStr &&
+               regCategoryId === categoryIdStr &&
+               r.registration_type === 'Individual';
+      });
+
+      // If there's an existing registration, check payment status
+      const existingRegistration = existingInPlayerRegs || existingInAllRegs;
+      
+      if (existingRegistration) {
+        const paymentStatus = existingRegistration.payment_status;
+        
+        // If payment is already Paid, block registration
+        if (paymentStatus === 'Paid') {
+          const eventName = category?.category_name || 'this event';
+          const playerName = playerUser.first_name && playerUser.last_name 
+            ? `${playerUser.first_name} ${playerUser.last_name}` 
+            : playerUser.username || 'This player';
+          
+          toast.warning(`${playerName} is already registered and paid for ${eventName}. Please select a different event.`);
+          setRegistering(false);
+          return;
+        }
+        
+        // If payment is Pending or Failed, allow them to proceed with payment
+        if (paymentStatus === 'Pending' || paymentStatus === 'Failed') {
+          const entryFee = category.individual_player_fee || 0;
+          
+          if (entryFee > 0) {
+            // Show payment modal for existing pending/failed registration
+            setPendingRegistration(existingRegistration);
+            setPendingCategory(category);
+            setShowPaymentModal(true);
+            setRegistering(false);
+            toast.info('Payment pending. Please complete payment to finalize registration.');
+            return;
+          }
+        }
+      }
+
+      // Check in recent registrations (prevent double-clicks) - but only if not pending payment
+      if (!existingRegistration || existingRegistration.payment_status === 'Paid') {
+        const existingInRecent = recentRegistrations.find(r => 
+          String(r.tournamentId) === tournamentIdStr && 
+          String(r.categoryId) === categoryIdStr
+        );
+
+        if (existingInRecent) {
+          const eventName = category?.category_name || 'this event';
+          toast.warning(`Registration for ${eventName} is being processed. Please wait...`);
+          setRegistering(false);
+          return;
+        }
+      }
+
+      // Register the player first (or get existing registration if payment is pending)
+      const registrationData = {
         tournament_id: tournamentId,
         category_id: categoryId,
         player_id: currentPlayer._id,
-        coach_id: user?.coach_id || user?._id,
-        amount: fee,
-        transaction_method: 'PayHere'
-      });
+        registration_type: 'Individual'
+      };
 
-      // Process PayHere payment
-      if (paymentRes.data?.payment_url) {
-        window.location.href = paymentRes.data.payment_url;
-      } else if (paymentRes.data?.payhere) {
-        // Extract customer info from player
-        const customerInfo = extractCustomerInfo(currentPlayer);
-        
-        // Process payment using utility
-        const success = processPayHerePayment(paymentRes, {
-          items: `Event Registration - ${category?.category_name || 'Tournament Event'}`,
-          customerInfo,
-          method: 'form'
-        });
-
-        if (!success) {
-          toast.error('Failed to redirect to payment gateway. Please try again.');
+      const registrationResponse = await registrationService.registerForTournament(registrationData);
+      const newRegistration = registrationResponse.data || registrationResponse;
+      
+      // Check if backend returned existing registration with pending payment
+      // Backend returns status 200 with requiresPayment: true if registration exists with pending payment
+      if (registrationResponse.requiresPayment || (existingRegistration && (existingRegistration.payment_status === 'Pending' || existingRegistration.payment_status === 'Failed'))) {
+        // Use existing registration for payment
+        const regToUse = existingRegistration || newRegistration;
+        const entryFee = category.individual_player_fee || 0;
+        if (entryFee > 0) {
+          setPendingRegistration(regToUse);
+          setPendingCategory(category);
+          setShowPaymentModal(true);
+          setRegistering(false);
+          toast.info('Payment pending. Please complete payment to finalize registration.');
+          return;
         }
+      }
+      
+      // Add to recent registrations to prevent duplicate clicks (only for new registrations)
+      if (!existingRegistration || existingRegistration.payment_status === 'Paid') {
+        setRecentRegistrations(prev => [
+          ...prev,
+          { tournamentId, categoryId, timestamp: Date.now() }
+        ]);
+        
+        // Clean up old recent registrations (older than 30 seconds)
+        setTimeout(() => {
+          setRecentRegistrations(prev => 
+            prev.filter(r => Date.now() - r.timestamp < 30000)
+          );
+        }, 30000);
+      }
+      
+      // Check if payment is required
+      const entryFee = category.individual_player_fee || 0;
+      
+      if (entryFee > 0) {
+        // Payment required - show payment modal
+        setPendingRegistration(newRegistration);
+        setPendingCategory(category);
+        setShowPaymentModal(true);
+        setRegistering(false); // Clear registering state so button can be used again if needed
+        toast.info('Please complete payment to finalize registration');
       } else {
-        toast.success('Payment initiated successfully! Registration will be completed after payment.');
+        // No payment required
+        setRegistering(false); // Clear registering state
+        toast.success('Player registered successfully for event!');
         if (onRegisterForEvent) {
           onRegisterForEvent(currentPlayer._id, categoryId, tournamentId);
         }
       }
     } catch (error) {
-      console.error('Error initiating payment:', error);
-      toast.error(error.response?.data?.message || 'Failed to initiate payment for event registration');
+      console.error('Error registering for event:', error);
+      
+      // Extract error message from various possible locations
+      let errorMessage = 'Failed to register for event';
+      const errorData = error.response?.data || error.data;
+      
+      if (errorData) {
+        // Handle duplicate registration error with a more user-friendly message
+        if (errorData.message && (
+          errorData.message.toLowerCase().includes('duplicate') ||
+          errorData.message.toLowerCase().includes('already registered')
+        )) {
+          const playerName = playerUser.first_name && playerUser.last_name 
+            ? `${playerUser.first_name} ${playerUser.last_name}` 
+            : playerUser.username || 'This player';
+          
+          const eventName = category?.category_name || 'this event';
+          errorMessage = `${playerName} is already registered for ${eventName}. Please select a different event.`;
+        } else if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+          // Check for validation errors array
+          const validationErrors = errorData.errors.map(err => {
+            const msg = err.msg || err.message || '';
+            const param = err.param || err.field || '';
+            return param ? `${param}: ${msg}` : msg;
+          }).join(', ');
+          errorMessage = errorData.message ? `${errorData.message} - ${validationErrors}` : validationErrors;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setRegistering(false);
     }
@@ -334,14 +524,14 @@ const PlayerDetailsModal = ({
               Player Details
             </button>
             <button
-              onClick={() => setActiveSection('events')}
+              onClick={() => setActiveSection('registrations')}
               className={`px-4 py-3 font-medium transition ${
-                activeSection === 'events'
+                activeSection === 'registrations'
                   ? 'border-b-2 border-blue-600 text-blue-600'
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
-              Register for Events
+              Event Registrations
             </button>
           </div>
         </div>
@@ -661,219 +851,121 @@ const PlayerDetailsModal = ({
           )}
 
 
-          {/* Events Registration Section */}
-          {activeSection === 'events' && (
+          {/* Event Registrations View Section - Read Only */}
+          {activeSection === 'registrations' && (
             <div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">Register for Events</h3>
+              <h3 className="text-2xl font-bold text-gray-800 mb-4">Event Registrations</h3>
               <p className="text-gray-600 mb-6">
-                Select events to register this player. Only events from tournaments you have registered for are displayed below, organized by tournament.
+                View all event registrations for this player. Players register and pay for events themselves through their dashboard.
               </p>
               
-              {coachRegisteredTournaments.filter(t => t.status === 'Open' || t.status === 'Ongoing').length === 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                  <p className="text-yellow-800">
-                    <strong>No Registered Tournaments:</strong> You need to register for tournaments first before you can register players for events. Go to the "Tournaments" tab to register.
-                  </p>
-                </div>
-              )}
-
-              {!formData.age || !formData.belt_rank ? (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                  <p className="text-yellow-800">
-                    <strong>Note:</strong> Please add player age and belt rank in the "Player Details" tab before registering for events.
+              {playerRegistrations.length === 0 ? (
+                <div className="text-center py-12">
+                  <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h4 className="text-lg font-semibold text-gray-800 mb-2">No Event Registrations</h4>
+                  <p className="text-gray-600">
+                    This player has not registered for any events yet. Players can register for events through their own dashboard.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* Only show tournaments where coach is registered */}
-                  {coachRegisteredTournaments.filter(t => t.status === 'Open' || t.status === 'Ongoing').map((tournament) => {
-                    // Get all events for this tournament (both individual and team, but filter out already registered ones)
-                    const tournamentAllEvents = categories.filter(cat => {
-                      const catTournamentId = cat.tournament_id?._id || cat.tournament_id;
-                      return catTournamentId === tournament._id || catTournamentId?.toString() === tournament._id?.toString();
+                <div className="space-y-4">
+                  {playerRegistrations.map((registration) => {
+                    const category = categories.find(c => {
+                      const regCategoryId = registration.category_id?._id || registration.category_id;
+                      return c._id === regCategoryId || c._id?.toString() === regCategoryId?.toString();
                     });
-
-                    // Filter out already registered events
-                    const tournamentAvailableEvents = tournamentAllEvents.filter(cat => {
-                      const alreadyRegistered = playerRegistrations.some(r => {
-                        const regCategoryId = r.category_id?._id || r.category_id;
-                        return regCategoryId === cat._id || regCategoryId?.toString() === cat._id?.toString();
-                      });
-                      return !alreadyRegistered;
+                    const tournament = tournaments.find(t => {
+                      const regTournamentId = registration.tournament_id?._id || registration.tournament_id;
+                      return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
                     });
-
-                    if (tournamentAvailableEvents.length === 0) return null;
 
                     return (
-                      <div key={tournament._id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                        <div className="flex justify-between items-center mb-4">
-                          <div>
-                            <h4 className="font-bold text-lg text-gray-800">{tournament.tournament_name}</h4>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {format(new Date(tournament.start_date), 'MMM dd, yyyy')} - {format(new Date(tournament.end_date), 'MMM dd, yyyy')}
-                            </p>
+                      <div key={registration._id} className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <h5 className="font-semibold text-lg text-gray-800 mb-1">
+                              {category?.category_name || 'Event'}
+                            </h5>
+                            <p className="text-sm text-gray-600 mb-2">{tournament?.tournament_name || 'Tournament'}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {category?.category_type && (
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  category.category_type === 'Kata' || category.category_type === 'Team Kata'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {category.category_type}
+                                </span>
+                              )}
+                              {category?.participation_type && (
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  category.participation_type === 'Individual'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                  {category.participation_type}
+                                </span>
+                              )}
+                              {category?.gender && (
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  category.gender === 'Male' 
+                                    ? 'bg-blue-100 text-blue-700' 
+                                    : category.gender === 'Female'
+                                    ? 'bg-pink-100 text-pink-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {category.gender === 'Male' ? '♂️ Male' : category.gender === 'Female' ? '♀️ Female' : '⚥ Mixed'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2 text-sm text-gray-600 space-y-1">
+                              {category?.age_category && <p><span className="font-medium">Age:</span> {category.age_category}</p>}
+                              {category?.belt_category && <p><span className="font-medium">Belt:</span> {category.belt_category}</p>}
+                              {category?.weight_category && <p><span className="font-medium">Weight:</span> {category.weight_category}</p>}
+                              <p className="text-xs text-gray-500 mt-2">
+                                Registered: {format(new Date(registration.registration_date || registration.createdAt), 'MMM dd, yyyy')}
+                              </p>
+                            </div>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            tournament.status === 'Open' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {tournament.status}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {tournamentAvailableEvents.map((category) => {
-                            const isIndividual = category.participation_type === 'Individual';
-                            const fee = isIndividual ? category.individual_player_fee : category.team_event_fee;
-                            
-                            return (
-                              <div
-                                key={category._id}
-                                className="border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:bg-white hover:shadow-md transition bg-white"
-                              >
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="flex-1">
-                                    <h5 className="font-semibold text-gray-800 mb-1">{category.category_name}</h5>
-                                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        category.category_type === 'Kata' || category.category_type === 'Team Kata'
-                                          ? 'bg-blue-100 text-blue-700'
-                                          : 'bg-red-100 text-red-700'
-                                      }`}>
-                                        {category.category_type}
-                                      </span>
-                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        isIndividual ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
-                                      }`}>
-                                        {category.participation_type}
-                                      </span>
-                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        category.gender === 'Male' 
-                                          ? 'bg-blue-100 text-blue-700' 
-                                          : category.gender === 'Female'
-                                          ? 'bg-pink-100 text-pink-700'
-                                          : 'bg-gray-100 text-gray-700'
-                                      }`}>
-                                        {category.gender === 'Male' ? '♂️ Male' : category.gender === 'Female' ? '♀️ Female' : '⚥ Mixed'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold whitespace-nowrap ml-2">
-                                    ${fee?.toFixed(2) || '0.00'}
-                                  </span>
-                                </div>
-                                <div className="text-xs text-gray-600 space-y-1 mb-3">
-                                  {category.age_category && <p><span className="font-medium">Age:</span> {category.age_category}</p>}
-                                  {category.belt_category && <p><span className="font-medium">Belt:</span> {category.belt_category}</p>}
-                                  {category.weight_category && <p><span className="font-medium">Weight:</span> {category.weight_category}</p>}
-                                  {!isIndividual && category.team_size && <p><span className="font-medium">Team Size:</span> {category.team_size}</p>}
-                                </div>
-                                {isIndividual ? (
-                                  <button
-                                    onClick={() => handleRegisterForEvent(category._id, tournament._id)}
-                                    disabled={registering}
-                                    className="w-full px-3 py-2 rounded text-sm transition disabled:opacity-50 bg-blue-600 text-white hover:bg-blue-700 font-medium"
-                                  >
-                                    {registering ? 'Processing...' : `Pay & Register ($${fee?.toFixed(2) || '0.00'})`}
-                                  </button>
-                                ) : (
-                                  <p className="text-xs text-gray-500 text-center py-2">
-                                    Team events require team registration
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
+                          <div className="text-right ml-4">
+                            <p className="font-bold text-lg text-gray-800 mb-2">
+                              ${category?.individual_player_fee?.toFixed(2) || '0.00'}
+                            </p>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              registration.payment_status === 'Paid' 
+                                ? 'bg-green-100 text-green-700'
+                                : registration.payment_status === 'Pending'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : registration.payment_status === 'Failed'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {registration.payment_status}
+                            </span>
+                            {registration.approval_status && (
+                              <span className={`block mt-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                                registration.approval_status === 'Approved'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : registration.approval_status === 'Pending'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {registration.approval_status}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
                   })}
-
-                  {coachRegisteredTournaments.filter(t => t.status === 'Open' || t.status === 'Ongoing').length === 0 && (
-                    <div className="text-center py-12">
-                      <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <h4 className="text-lg font-semibold text-gray-800 mb-2">No Open Tournaments</h4>
-                      <p className="text-gray-600">There are no open tournaments available for registration</p>
-                    </div>
-                  )}
-
-                  {coachRegisteredTournaments.filter(t => t.status === 'Open' || t.status === 'Ongoing').length > 0 && 
-                   categories.filter(cat => {
-                     const catTournamentId = cat.tournament_id?._id || cat.tournament_id;
-                     const tournament = coachRegisteredTournaments.find(t => 
-                       t._id === catTournamentId || t._id?.toString() === catTournamentId?.toString()
-                     );
-                     return tournament && (tournament.status === 'Open' || tournament.status === 'Ongoing');
-                   }).filter(cat => {
-                     const alreadyRegistered = playerRegistrations.some(r => {
-                       const regCategoryId = r.category_id?._id || r.category_id;
-                       return regCategoryId === cat._id || regCategoryId?.toString() === cat._id?.toString();
-                     });
-                     return !alreadyRegistered;
-                   }).length === 0 && (
-                    <div className="text-center py-12">
-                      <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <h4 className="text-lg font-semibold text-gray-800 mb-2">No Available Events</h4>
-                      <p className="text-gray-600">All events are already registered or no matching events found for this player</p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Payment History Section - Show in Events tab */}
-          {activeSection === 'events' && playerRegistrations.length > 0 && (
-            <div className="mt-8 pt-8 border-t border-gray-200">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Event Payment History</h3>
-              <div className="space-y-3">
-                {playerRegistrations.map((registration) => {
-                  const category = categories.find(c => {
-                    const regCategoryId = registration.category_id?._id || registration.category_id;
-                    return c._id === regCategoryId || c._id?.toString() === regCategoryId?.toString();
-                  });
-                  const tournament = tournaments.find(t => {
-                    const regTournamentId = registration.tournament_id?._id || registration.tournament_id;
-                    return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
-                  });
-
-                  return (
-                    <div key={registration._id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h5 className="font-semibold text-gray-800">
-                            {category?.category_name || 'Event'}
-                          </h5>
-                          <p className="text-sm text-gray-600">{tournament?.tournament_name || 'Tournament'}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-gray-800">
-                            ${category?.individual_player_fee?.toFixed(2) || '0.00'}
-                          </p>
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            registration.payment_status === 'Paid' 
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {registration.payment_status}
-                          </span>
-                        </div>
-                      </div>
-                      {registration.payment_status === 'Pending' && (
-                        <button
-                          onClick={() => handleEventPayment(registration._id)}
-                          disabled={paying}
-                          className="w-full mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-                        >
-                          {paying ? 'Processing...' : 'Pay Event Fee'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
     </div>
   );
 };

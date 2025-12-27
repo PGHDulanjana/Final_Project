@@ -20,6 +20,7 @@ import LiveScoreboard from '../../components/LiveScoreboard';
 import MatchDrawsBracket from '../../components/MatchDrawsBracket';
 import TournamentDetailModal from '../../components/TournamentDetailModal';
 import PlayerDetailsModal from '../../components/PlayerDetailsModal';
+import PayHerePaymentModal from '../../components/PayHerePaymentModal';
 import {
   FiUsers,
   FiAward,
@@ -89,6 +90,8 @@ const CoachDashboard = () => {
   const [showRegisterPlayer, setShowRegisterPlayer] = useState(false);
   const [showRegisterTeam, setShowRegisterTeam] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [pendingRegistration, setPendingRegistration] = useState(null);
+  const [pendingCategory, setPendingCategory] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [selectedTournament, setSelectedTournament] = useState(null);
@@ -734,29 +737,126 @@ const CoachDashboard = () => {
       toast.error('Please select an event');
       return;
     }
+    if (!registrationForm.player_id) {
+      toast.error('Please select a player');
+      return;
+    }
+    if (!registrationForm.tournament_id) {
+      toast.error('Please select a tournament');
+      return;
+    }
+
+    // Check for duplicate registration before attempting to register
+    const existingRegistration = registrations.find(r => {
+      const regTournamentId = r.tournament_id?._id || r.tournament_id;
+      const regCategoryId = r.category_id?._id || r.category_id;
+      const regPlayerId = r.player_id?._id || r.player_id;
+      
+      return regTournamentId === registrationForm.tournament_id &&
+             regCategoryId === registrationForm.category_id &&
+             regPlayerId === registrationForm.player_id &&
+             r.registration_type === 'Individual';
+    });
+
+    if (existingRegistration) {
+      const player = players.find(p => p._id === registrationForm.player_id);
+      const playerName = player?.user_id 
+        ? `${player.user_id.first_name || ''} ${player.user_id.last_name || ''}`.trim() || player.user_id.username
+        : 'This player';
+      
+      const category = categories.find(c => c._id === registrationForm.category_id);
+      const eventName = category?.category_name || 'this event';
+      
+      toast.warning(`${playerName} is already registered for ${eventName}. Please select a different player or event.`);
+      return;
+    }
+
     try {
-      await registrationService.registerForTournament({
+      const registrationData = {
         tournament_id: registrationForm.tournament_id,
         category_id: registrationForm.category_id,
         player_id: registrationForm.player_id,
-        registration_type: 'Individual',
-        coach_id: user?.coach_id || user?._id
-      });
-      toast.success('Player registered successfully!');
-      setShowRegisterPlayer(false);
-      setRegistrationForm({
-        tournament_id: '',
-        category_id: '',
-        player_id: '',
-        team_id: '',
-        registration_type: 'Individual',
-        event_type: 'Kata'
-      });
-      setSelectedTournamentCategories([]);
-      loadData();
+        registration_type: 'Individual'
+      };
+      
+      // Backend automatically determines coach_id for Coach users
+      // Only include coach_id if explicitly needed and it's a valid MongoDB ID
+      // For Individual registrations by Coaches, backend handles this automatically
+      
+      console.log('Registering player with data:', registrationData);
+      
+      // Register the player first
+      const registrationResponse = await registrationService.registerForTournament(registrationData);
+      const newRegistration = registrationResponse.data || registrationResponse;
+      
+      // Get the category to check if payment is required
+      const category = categories.find(c => c._id === registrationForm.category_id);
+      const entryFee = category?.individual_player_fee || 0;
+      
+      if (entryFee > 0) {
+        // Payment required - show payment modal
+        setPendingRegistration(newRegistration);
+        setPendingCategory(category);
+        setShowPaymentModal(true);
+        toast.info('Please complete payment to finalize registration');
+      } else {
+        // No payment required
+        toast.success('Player registered successfully!');
+        setShowRegisterPlayer(false);
+        setRegistrationForm({
+          tournament_id: '',
+          category_id: '',
+          player_id: '',
+          team_id: '',
+          registration_type: 'Individual',
+          event_type: 'Kata'
+        });
+        loadData();
+      }
     } catch (error) {
       console.error('Error registering player:', error);
-      toast.error(error.response?.data?.message || 'Failed to register player');
+      
+      // Extract error message from various possible locations
+      let errorMessage = 'Failed to register player';
+      const errorData = error.response?.data || error.data;
+      
+      if (errorData) {
+        // Handle duplicate registration error with a more user-friendly message
+        if (errorData.message && (
+          errorData.message.toLowerCase().includes('duplicate') ||
+          errorData.message.toLowerCase().includes('already registered')
+        )) {
+          const player = players.find(p => p._id === registrationForm.player_id);
+          const playerName = player?.user_id 
+            ? `${player.user_id.first_name || ''} ${player.user_id.last_name || ''}`.trim() || player.user_id.username
+            : 'This player';
+          
+          const category = categories.find(c => c._id === registrationForm.category_id);
+          const eventName = category?.category_name || 'this event';
+          
+          errorMessage = `${playerName} is already registered for ${eventName}. Please select a different player or event.`;
+        } else if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+          // Check for validation errors array
+          const validationErrors = errorData.errors.map(err => {
+            const msg = err.msg || err.message || '';
+            const param = err.param || err.field || '';
+            return param ? `${param}: ${msg}` : msg;
+          }).join(', ');
+          errorMessage = errorData.message ? `${errorData.message} - ${validationErrors}` : validationErrors;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      console.error('Error details:', {
+        status: error.response?.status || error.status,
+        data: errorData,
+        fullError: error
+      });
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -784,7 +884,6 @@ const CoachDashboard = () => {
         registration_type: 'Team',
         event_type: 'Team Kata'
       });
-      setSelectedTournamentCategories([]);
       loadData();
     } catch (error) {
       console.error('Error registering team:', error);
@@ -1565,13 +1664,6 @@ const CoachDashboard = () => {
                 <h2 className="text-2xl font-bold text-gray-800">Registrations</h2>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setShowRegisterPlayer(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                  >
-                    <FiUserPlus className="w-5 h-5" />
-                    Register Player
-                  </button>
-                  <button
                     onClick={() => setShowRegisterTeam(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
                   >
@@ -1638,6 +1730,8 @@ const CoachDashboard = () => {
                 const registeredTournaments = tournaments.filter(t => 
                   registeredTournamentIds.has(String(t._id))
                 );
+                // Show all tournaments (regardless of status)
+                // Backend will validate if tournament is open for registration
                 const availableTournaments = tournaments.filter(t => 
                   !registeredTournamentIds.has(String(t._id))
                 );
@@ -1692,20 +1786,12 @@ const CoachDashboard = () => {
                                 }}
                                 onRegister={async () => {
                                   try {
-                                    
-                                    // Backend finds coach by user_id, so we don't need to send coach_id
-                                    // But we can send it if it exists for reference
+                                    // Backend finds coach by user_id automatically
+                                    // Don't send coach_id - let backend handle it for consistency
                                     const registrationData = {
                                       tournament_id: tournament._id,
                                       registration_type: 'Coach'
                                     };
-                                    
-                                    // Use coachProfile._id if available, fallback to user.coach_id
-                                    if (coachProfile?._id) {
-                                      registrationData.coach_id = coachProfile._id;
-                                    } else if (user?.coach_id) {
-                                      registrationData.coach_id = user.coach_id;
-                                    }
                                     
                                     const response = await registrationService.registerForTournament(registrationData);
                                     toast.success('Successfully registered for tournament! Registration is free.');
@@ -1792,20 +1878,12 @@ const CoachDashboard = () => {
                                 }}
                                 onRegister={async () => {
                                   try {
-                                    
-                                    // Backend finds coach by user_id, so we don't need to send coach_id
-                                    // But we can send it if it exists for reference
+                                    // Backend finds coach by user_id automatically
+                                    // Don't send coach_id - let backend handle it for consistency
                                     const registrationData = {
                                       tournament_id: tournament._id,
                                       registration_type: 'Coach'
                                     };
-                                    
-                                    // Use coachProfile._id if available, fallback to user.coach_id
-                                    if (coachProfile?._id) {
-                                      registrationData.coach_id = coachProfile._id;
-                                    } else if (user?.coach_id) {
-                                      registrationData.coach_id = user.coach_id;
-                                    }
                                     
                                     const response = await registrationService.registerForTournament(registrationData);
                                     toast.success('Successfully registered for tournament! Registration is free.');
@@ -1994,7 +2072,6 @@ const CoachDashboard = () => {
               registration_type: 'Individual',
               event_type: 'Kata'
             });
-            setSelectedTournamentCategories([]);
           }}
           onSubmit={handleRegisterPlayer}
           formData={registrationForm}
@@ -2002,13 +2079,6 @@ const CoachDashboard = () => {
           tournaments={tournaments}
           players={players}
           categories={categories}
-          onTournamentChange={(tournamentId) => {
-            const tournamentCategories = categories.filter(c => {
-              const catTournamentId = c.tournament_id?._id || c.tournament_id;
-              return catTournamentId === tournamentId || catTournamentId?.toString() === tournamentId?.toString();
-            }).filter(c => c.participation_type === 'Individual');
-            setSelectedTournamentCategories(tournamentCategories);
-          }}
         />
       )}
 
@@ -2026,7 +2096,6 @@ const CoachDashboard = () => {
               registration_type: 'Team',
               event_type: 'Team Kata'
             });
-            setSelectedTournamentCategories([]);
           }}
           onSubmit={handleRegisterTeam}
           formData={registrationForm}
@@ -2034,12 +2103,50 @@ const CoachDashboard = () => {
           tournaments={tournaments}
           teams={teams}
           categories={categories}
-          onTournamentChange={(tournamentId) => {
-            const tournamentCategories = categories.filter(c => {
-              const catTournamentId = c.tournament_id?._id || c.tournament_id;
-              return catTournamentId === tournamentId || catTournamentId?.toString() === tournamentId?.toString();
-            }).filter(c => c.participation_type === 'Team');
-            setSelectedTournamentCategories(tournamentCategories);
+        />
+      )}
+
+      {/* Payment Modal for Player Registration */}
+      {showPaymentModal && pendingRegistration && pendingCategory && (
+        <PayHerePaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPendingRegistration(null);
+            setPendingCategory(null);
+            // Reload data to show updated registration status
+            loadData();
+          }}
+          registration={{
+            ...pendingRegistration,
+            // Add category fee information to registration for payment calculation
+            category_fee: pendingCategory.individual_player_fee || 0
+          }}
+          tournament={{
+            // Get tournament data
+            ...tournaments.find(t => {
+              const regTournamentId = pendingRegistration.tournament_id?._id || pendingRegistration.tournament_id;
+              return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
+            }),
+            // Override tournament fees with category-specific fees
+            entry_fee_individual: pendingCategory.individual_player_fee || 0,
+            entry_fee_team: pendingCategory.team_event_fee || 0
+          }}
+          onSuccess={async () => {
+            toast.success('Payment completed successfully! Player registered for event.');
+            setShowPaymentModal(false);
+            setPendingRegistration(null);
+            setPendingCategory(null);
+            setShowRegisterPlayer(false);
+            setRegistrationForm({
+              tournament_id: '',
+              category_id: '',
+              player_id: '',
+              team_id: '',
+              registration_type: 'Individual',
+              event_type: 'Kata'
+            });
+            await loadData();
           }}
         />
       )}
@@ -2541,15 +2648,17 @@ const TournamentCard = ({ tournament, registration, onSelect, onRegister, onLeav
         </div>
       </div>
       <div className="space-y-2">
-        {!isRegistered && tournament.status === 'Open' && (
+        {!isRegistered && (
           <button
             onClick={handleRegister}
             type="button"
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-emerald-700 transition text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2 rounded-lg hover:from-green-700 hover:to-emerald-700 transition text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ pointerEvents: 'auto' }}
+            disabled={tournament.status !== 'Open'}
+            title={tournament.status !== 'Open' ? 'Tournament is not open for registration' : 'Register for Tournament (FREE)'}
           >
             <FiUserPlus className="w-4 h-4" />
-            Register for Tournament (FREE)
+            {tournament.status === 'Open' ? 'Register for Tournament (FREE)' : 'Registration Closed'}
           </button>
         )}
         {isRegistered && tournament.status === 'Open' && (
@@ -2728,7 +2837,7 @@ const CreateTeamModal = ({ isOpen, onClose, onSubmit, formData, setFormData, pla
 };
 
 // Register Player Modal Component
-const RegisterPlayerModal = ({ isOpen, onClose, onSubmit, formData, setFormData, tournaments, players, categories, onTournamentChange }) => {
+const RegisterPlayerModal = ({ isOpen, onClose, onSubmit, formData, setFormData, tournaments, players, categories }) => {
   const [selectedTournamentCategories, setSelectedTournamentCategories] = useState([]);
 
   useEffect(() => {
@@ -2767,7 +2876,6 @@ const RegisterPlayerModal = ({ isOpen, onClose, onSubmit, formData, setFormData,
               value={formData.tournament_id}
               onChange={(e) => {
                 setFormData({ ...formData, tournament_id: e.target.value, category_id: '' });
-                if (onTournamentChange) onTournamentChange(e.target.value);
               }}
               required
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2869,7 +2977,7 @@ const RegisterPlayerModal = ({ isOpen, onClose, onSubmit, formData, setFormData,
 };
 
 // Register Team Modal Component
-const RegisterTeamModal = ({ isOpen, onClose, onSubmit, formData, setFormData, tournaments, teams, categories, onTournamentChange }) => {
+const RegisterTeamModal = ({ isOpen, onClose, onSubmit, formData, setFormData, tournaments, teams, categories }) => {
   const [selectedTournamentCategories, setSelectedTournamentCategories] = useState([]);
 
   useEffect(() => {
@@ -2908,7 +3016,6 @@ const RegisterTeamModal = ({ isOpen, onClose, onSubmit, formData, setFormData, t
               value={formData.tournament_id}
               onChange={(e) => {
                 setFormData({ ...formData, tournament_id: e.target.value, category_id: '' });
-                if (onTournamentChange) onTournamentChange(e.target.value);
               }}
               required
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"

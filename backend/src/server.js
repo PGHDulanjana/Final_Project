@@ -12,6 +12,14 @@ const startServer = async () => {
     // Connect to database first
     await connectDB();
     
+    // Drop old indexes (migration)
+    try {
+      const Registration = require('./models/Registration');
+      await Registration.dropOldIndexes();
+    } catch (error) {
+      console.warn('⚠️  Could not drop old indexes:', error.message);
+    }
+    
     // Create HTTP server
     const server = http.createServer(app);
 

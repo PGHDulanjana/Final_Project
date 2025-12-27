@@ -193,22 +193,112 @@ const CategoryManagement = () => {
     }
 
     try {
+      // Clean and prepare category data
+      // Ensure boolean values are actual booleans, not strings
       const categoryData = {
-        ...formData,
-        individual_player_fee: formData.participation_type === 'Individual' ? parseFloat(formData.individual_player_fee) || 0 : 0,
-        team_event_fee: formData.participation_type === 'Team' ? parseFloat(formData.team_event_fee) || 0 : 0,
-        team_size: formData.participation_type === 'Team' ? parseInt(formData.team_size) || 3 : undefined,
-        // Clear weight for Kata events
-        weight_category: (formData.category_type === 'Kata' || formData.category_type === 'Team Kata') ? '' : formData.weight_category,
-        weight_min: (formData.category_type === 'Kata' || formData.category_type === 'Team Kata') ? undefined : (formData.weight_min ? parseFloat(formData.weight_min) : undefined),
-        weight_max: (formData.category_type === 'Kata' || formData.category_type === 'Team Kata') ? undefined : (formData.weight_max ? parseFloat(formData.weight_max) : undefined),
-        // Handle custom belt levels
-        custom_belt_levels: formData.use_custom_belt_levels ? formData.custom_belt_levels : [],
-        belt_level_groups: formData.use_custom_belt_levels ? formData.belt_level_groups : {},
-        belt_level_group: formData.use_custom_belt_levels ? formData.belt_level_group : '',
-        belt_level: formData.use_custom_belt_levels ? formData.belt_level : '',
-        belt_category: formData.use_custom_belt_levels ? '' : formData.belt_category
+        tournament_id: formData.tournament_id,
+        category_name: formData.category_name.trim(),
+        category_type: formData.category_type,
+        participation_type: formData.participation_type,
+        age_category: formData.age_category.trim(),
+        use_wkf_standard: Boolean(formData.use_wkf_standard),
+        use_standard_kumite_classes: Boolean(formData.use_standard_kumite_classes),
+        is_open_event: Boolean(formData.is_open_event),
+        use_custom_belt_levels: Boolean(formData.use_custom_belt_levels)
       };
+
+      // Handle fees - only include if participation type matches
+      if (formData.participation_type === 'Individual') {
+        const individualFee = parseFloat(formData.individual_player_fee) || 0;
+        categoryData.individual_player_fee = individualFee;
+        // Don't include team_event_fee for individual events
+      } else if (formData.participation_type === 'Team') {
+        const teamFee = parseFloat(formData.team_event_fee) || 0;
+        categoryData.team_event_fee = teamFee;
+        // Don't include individual_player_fee for team events
+        // Team size is required for team events
+        const teamSize = parseInt(formData.team_size) || 3;
+        if (teamSize >= 2) {
+          categoryData.team_size = teamSize;
+        }
+      }
+
+      // Handle gender - only include if not empty
+      if (formData.gender && formData.gender.trim() !== '') {
+        categoryData.gender = formData.gender;
+      }
+
+      // Handle age range - only include if provided
+      if (formData.age_min && formData.age_min !== '') {
+        const ageMin = parseInt(formData.age_min);
+        if (!isNaN(ageMin) && ageMin >= 0) {
+          categoryData.age_min = ageMin;
+        }
+      }
+      if (formData.age_max && formData.age_max !== '') {
+        const ageMax = parseInt(formData.age_max);
+        if (!isNaN(ageMax) && ageMax >= 0) {
+          categoryData.age_max = ageMax;
+        }
+      }
+
+      // Handle weight category and range - only for Kumite events
+      if (formData.category_type === 'Kumite' || formData.category_type === 'Team Kumite') {
+        if (formData.weight_category && formData.weight_category.trim() !== '') {
+          categoryData.weight_category = formData.weight_category.trim();
+        }
+        if (formData.weight_min && formData.weight_min !== '') {
+          const weightMin = parseFloat(formData.weight_min);
+          if (!isNaN(weightMin) && weightMin >= 0) {
+            categoryData.weight_min = weightMin;
+          }
+        }
+        if (formData.weight_max && formData.weight_max !== '') {
+          const weightMax = parseFloat(formData.weight_max);
+          if (!isNaN(weightMax) && weightMax >= 0) {
+            categoryData.weight_max = weightMax;
+          }
+        }
+      }
+
+      // Handle belt category - only if not using custom belt levels
+      if (!formData.use_custom_belt_levels && formData.belt_category && formData.belt_category.trim() !== '') {
+        categoryData.belt_category = formData.belt_category.trim();
+      }
+
+      // Handle custom belt levels
+      if (formData.use_custom_belt_levels) {
+        if (Array.isArray(formData.custom_belt_levels) && formData.custom_belt_levels.length > 0) {
+          categoryData.custom_belt_levels = formData.custom_belt_levels;
+        }
+        // Only include belt_level_groups if it's a non-empty object
+        if (formData.belt_level_groups && 
+            typeof formData.belt_level_groups === 'object' && 
+            formData.belt_level_groups !== null &&
+            Object.keys(formData.belt_level_groups).length > 0) {
+          categoryData.belt_level_groups = formData.belt_level_groups;
+        }
+        if (formData.belt_level_group && formData.belt_level_group.trim() !== '') {
+          categoryData.belt_level_group = formData.belt_level_group.trim();
+        }
+        if (formData.belt_level && formData.belt_level.trim() !== '') {
+          categoryData.belt_level = formData.belt_level.trim();
+        }
+      }
+
+      // Remove undefined, null, empty string, empty array, and empty object values
+      Object.keys(categoryData).forEach(key => {
+        const value = categoryData[key];
+        if (value === undefined || value === null || value === '') {
+          delete categoryData[key];
+        } else if (Array.isArray(value) && value.length === 0) {
+          delete categoryData[key];
+        } else if (typeof value === 'object' && Object.keys(value).length === 0) {
+          delete categoryData[key];
+        }
+      });
+
+      console.log('Sending category data:', categoryData);
 
       if (editingCategory) {
         await categoryService.updateCategory(editingCategory._id, categoryData);
@@ -223,7 +313,34 @@ const CategoryManagement = () => {
       loadCategories();
     } catch (error) {
       console.error('Error saving category:', error);
-      toast.error(error.response?.data?.message || 'Failed to save category');
+      
+      // Extract and display specific validation errors
+      let errorMessage = 'Failed to save category';
+      const errorData = error.response?.data || error.data;
+      
+      if (errorData) {
+        // Check for validation errors array
+        if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+          const validationErrors = errorData.errors.map(err => {
+            const msg = err.msg || err.message || '';
+            const param = err.param || err.field || '';
+            return param ? `${param}: ${msg}` : msg;
+          }).join(', ');
+          errorMessage = errorData.message ? `${errorData.message} - ${validationErrors}` : validationErrors;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      console.error('Error details:', {
+        status: error.response?.status || error.status,
+        data: errorData,
+        fullError: error
+      });
+      
+      toast.error(errorMessage);
     }
   };
 

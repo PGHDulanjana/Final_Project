@@ -116,7 +116,10 @@ export const submitPayHereForm = (payhereData, options = {}) => {
     order_id,
     amount,
     currency = 'LKR',
-    hash
+    hash,
+    return_url, // From backend response
+    cancel_url, // From backend response
+    notify_url // From backend response
   } = payhereData;
 
   const {
@@ -128,25 +131,58 @@ export const submitPayHereForm = (payhereData, options = {}) => {
 
   // Get frontend base URL for return/cancel URLs
   const frontendBaseUrl = window.location.origin;
-  const defaultReturnUrl = `${frontendBaseUrl}/payment/success?payment_id=${order_id}`;
-  const defaultCancelUrl = `${frontendBaseUrl}/payment/cancel?payment_id=${order_id}`;
-  const notifyUrl = `${BASE_URL}/api/payments/payhere-callback`;
+  // Use return_url from backend if provided, otherwise use options, otherwise default
+  const finalReturnUrl = return_url || returnUrl || `${frontendBaseUrl}/payment/success?order_id=${order_id}&payment_id=${order_id}`;
+  const finalCancelUrl = cancel_url || cancelUrl || `${frontendBaseUrl}/payment/cancel?order_id=${order_id}&payment_id=${order_id}`;
+  const finalNotifyUrl = notify_url || `${BASE_URL}/api/payments/payhere-callback`;
+
+  // Validate required fields before creating form
+  if (!merchant_id || !order_id || !amount || !hash) {
+    console.error('PayHere: Missing required fields', {
+      hasMerchantId: !!merchant_id,
+      hasOrderId: !!order_id,
+      hasAmount: !!amount,
+      hasHash: !!hash,
+      merchant_id,
+      order_id,
+      amount,
+      hash: hash ? hash.substring(0, 10) + '...' : null
+    });
+    alert('Payment initialization error. Missing required payment parameters. Please contact support.');
+    return;
+  }
+
+  // Ensure amount is formatted correctly (2 decimal places, no commas)
+  // PayHere requires format: "1000.00"
+  const formattedAmount = parseFloat(amount).toFixed(2);
+
+  console.log('Submitting PayHere form:', {
+    merchant_id,
+    order_id,
+    amount: formattedAmount,
+    currency: currency || 'LKR',
+    return_url: finalReturnUrl,
+    cancel_url: finalCancelUrl,
+    notify_url: finalNotifyUrl,
+    items: items || 'Tournament Registration',
+    hash: hash.substring(0, 10) + '...'
+  });
 
   // Create form
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = getPayHereCheckoutUrl();
 
-  // Required fields
+  // Required fields - PayHere expects these exact field names
   const formData = {
     merchant_id,
-    return_url: returnUrl || defaultReturnUrl,
-    cancel_url: cancelUrl || defaultCancelUrl,
-    notify_url: notifyUrl,
+    return_url: finalReturnUrl,
+    cancel_url: finalCancelUrl,
+    notify_url: finalNotifyUrl,
     order_id,
-    items,
-    amount,
-    currency,
+    items: items || 'Tournament Registration',
+    amount: formattedAmount,
+    currency: currency || 'LKR',
     hash
   };
 
@@ -159,19 +195,23 @@ export const submitPayHereForm = (payhereData, options = {}) => {
   if (customerInfo.city) formData.city = customerInfo.city;
   if (customerInfo.country) formData.country = customerInfo.country || 'Sri Lanka';
 
-  // Create hidden inputs
+  // Create hidden inputs and log for debugging
+  console.log('PayHere Form Data:', formData);
+  
   Object.entries(formData).forEach(([key, value]) => {
-    if (value !== null && value !== undefined) {
+    if (value !== null && value !== undefined && value !== '') {
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = key;
-      input.value = value;
+      input.value = String(value); // Ensure value is a string
       form.appendChild(input);
+      console.log(`Added form field: ${key} = ${value}`);
     }
   });
 
   // Submit form
   document.body.appendChild(form);
+  console.log('Submitting PayHere form to:', getPayHereCheckoutUrl());
   form.submit();
 };
 
@@ -191,7 +231,10 @@ export const redirectToPayHere = (payhereData, options = {}) => {
     order_id,
     amount,
     currency = 'LKR',
-    hash
+    hash,
+    return_url, // From backend response
+    cancel_url, // From backend response
+    notify_url // From backend response
   } = payhereData;
 
   const {
@@ -203,9 +246,10 @@ export const redirectToPayHere = (payhereData, options = {}) => {
 
   // Get frontend base URL for return/cancel URLs
   const frontendBaseUrl = window.location.origin;
-  const defaultReturnUrl = `${frontendBaseUrl}/payment/success?payment_id=${order_id}`;
-  const defaultCancelUrl = `${frontendBaseUrl}/payment/cancel?payment_id=${order_id}`;
-  const notifyUrl = `${BASE_URL}/api/payments/payhere-callback`;
+  // Use return_url from backend if provided, otherwise use options, otherwise default
+  const finalReturnUrl = return_url || returnUrl || `${frontendBaseUrl}/payment/success?order_id=${order_id}&payment_id=${order_id}`;
+  const finalCancelUrl = cancel_url || cancelUrl || `${frontendBaseUrl}/payment/cancel?order_id=${order_id}&payment_id=${order_id}`;
+  const finalNotifyUrl = notify_url || `${BASE_URL}/api/payments/payhere-callback`;
 
   const checkoutUrl = buildPayHereCheckoutUrl({
     merchant_id,
@@ -214,9 +258,9 @@ export const redirectToPayHere = (payhereData, options = {}) => {
     currency,
     hash,
     items,
-    return_url: returnUrl || defaultReturnUrl,
-    cancel_url: cancelUrl || defaultCancelUrl,
-    notify_url: notifyUrl,
+    return_url: finalReturnUrl,
+    cancel_url: finalCancelUrl,
+    notify_url: finalNotifyUrl,
     customerInfo
   });
 

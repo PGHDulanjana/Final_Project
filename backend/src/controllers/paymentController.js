@@ -224,10 +224,45 @@ const createPayment = async (req, res, next) => {
 
     // PayHere payment hash generation (using shared service helper)
     const merchant_id = process.env.PAYHERE_MERCHANT_ID;
+    if (!merchant_id) {
+      console.error('PayHere merchant ID is not configured in environment variables');
+      return res.status(500).json({
+        success: false,
+        message: 'PayHere merchant ID is not configured. Please contact support.'
+      });
+    }
+    
     const order_id = payment._id.toString();
-    const payhere_amount = payment.amount.toFixed(2);
+    // Format amount to 2 decimal places as string (PayHere requires this format: "1000.00")
+    const payhere_amount = parseFloat(payment.amount).toFixed(2);
     const currency = 'LKR';
-    const hash = generatePayHereHash(order_id, payment.amount);
+    
+    console.log('Creating PayHere payment:', {
+      merchant_id,
+      order_id,
+      amount: payhere_amount,
+      currency,
+      payment_id: payment._id
+    });
+    
+    // Generate hash using the formatted amount string (must match what's sent to PayHere)
+    let hash;
+    try {
+      hash = generatePayHereHash(order_id, payhere_amount);
+    } catch (error) {
+      console.error('Error generating PayHere hash:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate payment hash. Please contact support.',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+
+    // Get frontend base URL from environment or use default
+    const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const return_url = `${frontendBaseUrl}/payment/success?order_id=${order_id}&payment_id=${order_id}`;
+    const cancel_url = `${frontendBaseUrl}/payment/cancel?order_id=${order_id}&payment_id=${order_id}`;
+    const notify_url = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/payments/payhere-callback`;
 
     res.status(201).json({
       success: true,
@@ -239,7 +274,10 @@ const createPayment = async (req, res, next) => {
           order_id,
           amount: payhere_amount,
           currency,
-          hash
+          hash,
+          return_url,
+          cancel_url,
+          notify_url
         }
       }
     });
@@ -381,11 +419,78 @@ const updatePayment = async (req, res, next) => {
   }
 };
 
+// @desc    Complete fake payment (TEMPORARY - for testing)
+// @route   POST /api/payments/:id/complete-fake
+// @access  Private
+const completeFakePayment = async (req, res, next) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
+    }
+
+    // Mark payment as completed
+    payment.payment_status = 'Completed';
+    payment.payment_date = new Date();
+    payment.transaction_method = 'Card'; // Fake payment method
+    await payment.save();
+
+    // Update registration payment status
+    let registration = null;
+    if (payment.registration_id) {
+      registration = await Registration.findById(payment.registration_id);
+      if (registration) {
+        registration.payment_status = 'Paid';
+        await registration.save();
+      }
+    } else {
+      // If no registration exists, create one (new flow)
+      if (payment.category_id && payment.player_id) {
+        const TournamentCategory = require('../models/TournamentCategory');
+        const category = await TournamentCategory.findById(payment.category_id);
+        
+        if (category) {
+          registration = await Registration.create({
+            tournament_id: payment.tournament_id,
+            category_id: payment.category_id,
+            player_id: payment.player_id,
+            coach_id: payment.coach_id || null,
+            registration_type: category.participation_type,
+            payment_status: 'Paid',
+            approval_status: 'Pending'
+          });
+
+          // Update payment with registration_id
+          payment.registration_id = registration._id;
+          await payment.save();
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment completed successfully (FAKE - Testing Mode)',
+      data: {
+        payment,
+        registration
+      }
+    });
+  } catch (error) {
+    console.error('Error completing fake payment:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   getPayments,
   getPayment,
   createPayment,
   payhereCallback,
-  updatePayment
+  updatePayment,
+  completeFakePayment
 };
 

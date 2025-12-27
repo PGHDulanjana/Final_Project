@@ -8,7 +8,7 @@ import { dojoService } from '../services/dojoService';
 import { matchService } from '../services/matchService';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
-import { FiX, FiCalendar, FiMapPin, FiDollarSign, FiUsers, FiClock, FiUser, FiCheck, FiUserPlus, FiPlus, FiTarget, FiAward } from 'react-icons/fi';
+import { FiX, FiCalendar, FiMapPin, FiDollarSign, FiUsers, FiClock, FiUser, FiCheck, FiUserPlus, FiPlus, FiTarget, FiAward, FiCreditCard, FiAlertCircle } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PayHerePaymentModal from './PayHerePaymentModal';
 import { processPayHerePayment } from '../utils/payhere';
@@ -17,10 +17,13 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
   const { user } = useAuth();
   const isOrganizer = user?.user_type === 'Organizer';
   const isCoach = user?.user_type === 'Coach';
+  const isPlayer = user?.user_type === 'Player';
   const [tournament, setTournament] = useState(null);
   const [categories, setCategories] = useState([]);
   const [matches, setMatches] = useState([]);
   const [registration, setRegistration] = useState(null);
+  const [playerRegistrations, setPlayerRegistrations] = useState([]); // Player's event registrations
+  const [coachRegistered, setCoachRegistered] = useState(false); // Track if player's coach is registered
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
@@ -39,6 +42,14 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
     team_id: '',
     registration_type: 'Individual'
   });
+  
+  // Player-specific states for event registration
+  const [selectedCategoryForPlayer, setSelectedCategoryForPlayer] = useState(null);
+  const [playerEventForm, setPlayerEventForm] = useState({
+    category_id: '',
+    registration_type: 'Individual'
+  });
+  
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState(null);
@@ -109,6 +120,37 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
         (r.judge_id?._id || r.judge_id) === (user?.judge_id || user?._id)
       );
       setRegistration(coachRegistration || judgeRegistration || allRegistrations[0] || null);
+      
+      // For players, get their event registrations
+      if (isPlayer) {
+        try {
+          const playersRes = await playerService.getPlayers();
+          const allPlayers = playersRes.data || [];
+          const playerProfile = allPlayers.find(p => {
+            const playerUserId = p.user_id?._id || p.user_id;
+            return String(playerUserId) === String(user._id);
+          });
+          
+          if (playerProfile) {
+            // Get player's individual event registrations
+            const playerEventRegs = allRegistrations.filter(r => 
+              r.registration_type === 'Individual' &&
+              r.player_id &&
+              (String(r.player_id?._id || r.player_id) === String(playerProfile._id))
+            );
+            setPlayerRegistrations(playerEventRegs);
+            
+            // Coach registration is no longer required for players to register
+            // Players can register themselves for events directly
+            setCoachRegistered(true);
+          } else {
+            // Even if player profile not found, allow registration attempt
+            setCoachRegistered(true);
+          }
+        } catch (error) {
+          console.error('Error loading player profile:', error);
+        }
+      }
       
       if (isCoach) {
         // For coach, players/teams/dojos are in results[4], [5], [6] after registrations
@@ -441,6 +483,173 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
             </div>
           </div>
 
+          {/* Bank Account Details */}
+          {(tournament.bank_account_holder_name || tournament.bank_name || tournament.bank_account_number) && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <FiCreditCard className="w-5 h-5 text-blue-600" />
+                Bank Account Details for Payments
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tournament.bank_account_holder_name && (
+                  <div>
+                    <p className="text-sm text-gray-500">Account Holder Name</p>
+                    <p className="font-semibold text-gray-800">{tournament.bank_account_holder_name}</p>
+                  </div>
+                )}
+                {tournament.bank_name && (
+                  <div>
+                    <p className="text-sm text-gray-500">Bank Name</p>
+                    <p className="font-semibold text-gray-800">{tournament.bank_name}</p>
+                  </div>
+                )}
+                {tournament.bank_account_number && (
+                  <div>
+                    <p className="text-sm text-gray-500">Account Number</p>
+                    <p className="font-semibold text-gray-800">{tournament.bank_account_number}</p>
+                  </div>
+                )}
+                {tournament.bank_branch && (
+                  <div>
+                    <p className="text-sm text-gray-500">Branch</p>
+                    <p className="font-semibold text-gray-800">{tournament.bank_branch}</p>
+                  </div>
+                )}
+                {tournament.bank_swift_code && (
+                  <div>
+                    <p className="text-sm text-gray-500">SWIFT Code</p>
+                    <p className="font-semibold text-gray-800">{tournament.bank_swift_code}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <p className="text-xs text-blue-700">
+                  <strong>Note:</strong> Use these bank account details for direct bank transfers or manual payments. Please include the tournament name as the payment reference.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Events for Players - Players can register themselves for events */}
+          {isPlayer && (
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <FiAward className="w-5 h-5" />
+                Events ({categories.length})
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                You can register for individual events below. Select an event, fill in your details, and complete payment.
+              </p>
+              {categories.length === 0 ? (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                  <p className="text-gray-600">No events available yet. The organizer will create events soon.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {categories.filter(cat => cat.participation_type === 'Individual').map((category) => {
+                    const isRegistered = playerRegistrations.some(r => {
+                      const regCategoryId = r.category_id?._id || r.category_id;
+                      return String(regCategoryId) === String(category._id);
+                    });
+                    const existingReg = playerRegistrations.find(r => {
+                      const regCategoryId = r.category_id?._id || r.category_id;
+                      return String(regCategoryId) === String(category._id);
+                    });
+                    
+                    return (
+                      <div key={category._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-gray-800">{category.category_name}</h4>
+                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
+                            {category.category_type}
+                          </span>
+                        </div>
+                        <div className="space-y-1 text-sm text-gray-600 mb-3">
+                          {category.use_custom_belt_levels && (
+                            <>
+                              {category.belt_level_group && (
+                                <p><span className="font-medium">Belt Level Group:</span> {category.belt_level_group}</p>
+                              )}
+                              {category.belt_level && (
+                                <p><span className="font-medium">Belt Level:</span> {category.belt_level}</p>
+                              )}
+                              {!category.belt_level_group && !category.belt_level && (
+                                <p><span className="font-medium">Belt Level:</span> Open (All Levels)</p>
+                              )}
+                            </>
+                          )}
+                          {!category.use_custom_belt_levels && category.belt_category && (
+                            <p><span className="font-medium">Belt:</span> {category.belt_category}</p>
+                          )}
+                          {(category.category_type === 'Kumite' || category.category_type === 'Team Kumite') && category.weight_category && (
+                            <p><span className="font-medium">Weight:</span> {category.weight_category}</p>
+                          )}
+                          {category.age_category && (
+                            <p><span className="font-medium">Age:</span> {category.age_category}</p>
+                          )}
+                          <p><span className="font-medium">Type:</span> {category.participation_type}</p>
+                          <p><span className="font-medium">Entry Fee:</span> ${category.individual_player_fee?.toFixed(2) || '0.00'}</p>
+                        </div>
+                        {isRegistered ? (
+                          <div className="pt-3 border-t border-gray-200">
+                            <div className={`p-2 rounded-lg text-sm font-semibold ${
+                              existingReg?.payment_status === 'Paid' 
+                                ? 'bg-green-100 text-green-800' 
+                                : existingReg?.payment_status === 'Pending'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {existingReg?.payment_status === 'Paid' 
+                                ? '✓ Registered & Paid' 
+                                : existingReg?.payment_status === 'Pending'
+                                ? '⏳ Payment Pending'
+                                : 'Registered'}
+                            </div>
+                            {existingReg?.payment_status === 'Pending' && (
+                              <button
+                                onClick={() => {
+                                  console.log('Complete Payment clicked:', {
+                                    registration: existingReg,
+                                    category: category,
+                                    registrationId: existingReg?._id,
+                                    categoryId: category?._id
+                                  });
+                                  setPendingRegistration(existingReg);
+                                  setPendingCategory(category);
+                                  setShowPaymentModal(true);
+                                  console.log('Payment modal state set to true');
+                                }}
+                                className="mt-2 w-full bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                              >
+                                Complete Payment
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="pt-3 border-t border-gray-200">
+                            <button
+                              onClick={() => {
+                                setSelectedCategoryForPlayer(category);
+                                setPlayerEventForm({
+                                  category_id: category._id,
+                                  registration_type: 'Individual'
+                                });
+                              }}
+                              className="w-full bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                            >
+                              Register for Event
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+
           {/* Categories - Show to Coaches, Judges, and Organizers */}
           {(user?.user_type === 'Coach' || user?.user_type === 'Judge' || user?.user_type === 'Organizer') && (
             <div className="mb-6">
@@ -516,23 +725,6 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                       {/* Register buttons for coaches */}
                       {isCoach && (
                         <div className="pt-3 border-t border-gray-200 space-y-2">
-                          {category.participation_type === 'Individual' && (
-                            <button
-                              onClick={() => {
-                                setSelectedEventForRegistration(category);
-                                setEventRegistrationForm({
-                                  category_id: category._id,
-                                  player_id: '',
-                                  team_id: '',
-                                  registration_type: 'Individual'
-                                });
-                              }}
-                              className="w-full bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold flex items-center justify-center gap-2"
-                            >
-                              <FiUserPlus className="w-4 h-4" />
-                              Register Player
-                            </button>
-                          )}
                           {category.participation_type === 'Team' && (
                             <button
                               onClick={() => {
@@ -579,24 +771,12 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                 onClick={async () => {
                   setRegistering(true);
                   try {
-                    
-                    // Backend finds coach/judge by user_id, so we don't need to send coach_id/judge_id
-                    // But we can send it if it exists for reference
+                    // Backend finds coach/judge by user_id automatically
+                    // Don't send coach_id/judge_id - let backend handle it for consistency
                     const registrationData = {
                       tournament_id: tournamentId,
                       registration_type: isCoach ? 'Coach' : 'Judge'
                     };
-                    
-                    // Only include coach_id if it exists and is valid
-                    if (isCoach && user?.coach_id) {
-                      registrationData.coach_id = user.coach_id;
-                    }
-                    
-                    // Only include judge_id if it exists and is valid
-                    if (user?.user_type === 'Judge' && user?.judge_id) {
-                      registrationData.judge_id = user.judge_id;
-                    }
-                    
                     
                     await registrationService.registerForTournament(registrationData);
                     toast.success(`Successfully registered as ${isCoach ? 'coach' : 'judge'}! Registration is free.`);
@@ -717,57 +897,98 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
             </div>
           )}
 
+          {/* Player Event Registration Form */}
+          {isPlayer && selectedCategoryForPlayer && (
+            <div className="mb-6 p-6 bg-blue-50 border-2 border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <FiUser className="w-5 h-5 text-blue-600" />
+                  Register for {selectedCategoryForPlayer.category_name}
+                </h3>
+                <button
+                  onClick={() => {
+                    setSelectedCategoryForPlayer(null);
+                    setPlayerEventForm({ category_id: '', registration_type: 'Individual' });
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg mb-4">
+                <div className="space-y-2 text-sm text-gray-700 mb-4">
+                  <p><span className="font-medium">Event Type:</span> {selectedCategoryForPlayer.category_type}</p>
+                  {selectedCategoryForPlayer.age_category && (
+                    <p><span className="font-medium">Age Category:</span> {selectedCategoryForPlayer.age_category}</p>
+                  )}
+                  {(selectedCategoryForPlayer.category_type === 'Kumite' || selectedCategoryForPlayer.category_type === 'Team Kumite') && selectedCategoryForPlayer.weight_category && (
+                    <p><span className="font-medium">Weight Category:</span> {selectedCategoryForPlayer.weight_category}</p>
+                  )}
+                  {selectedCategoryForPlayer.belt_category && (
+                    <p><span className="font-medium">Belt Category:</span> {selectedCategoryForPlayer.belt_category}</p>
+                  )}
+                  <p><span className="font-medium">Entry Fee:</span> ${selectedCategoryForPlayer.individual_player_fee?.toFixed(2) || '0.00'}</p>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    setRegistering(true);
+                    try {
+                      const registrationData = {
+                        tournament_id: tournamentId,
+                        category_id: selectedCategoryForPlayer._id,
+                        registration_type: 'Individual'
+                        // player_id will be auto-detected by backend from user
+                      };
+
+                      const response = await registrationService.registerForTournament(registrationData);
+                      const newRegistration = response.data || response;
+
+                      toast.success('Registration successful!');
+
+                      // Reload tournament details
+                      await loadTournamentDetails();
+
+                      // If payment required
+                      const entryFee = selectedCategoryForPlayer.individual_player_fee || 0;
+                      if (entryFee > 0) {
+                        setPendingRegistration(newRegistration);
+                        setPendingCategory(selectedCategoryForPlayer);
+                        setShowPaymentModal(true);
+                      } else {
+                        setSelectedCategoryForPlayer(null);
+                        setPlayerEventForm({ category_id: '', registration_type: 'Individual' });
+                      }
+                    } catch (error) {
+                      console.error('Error registering for event:', error);
+                      const errorMessage = error.response?.data?.message || error.message || 'Failed to register for event';
+                      toast.error(errorMessage);
+                    } finally {
+                      setRegistering(false);
+                    }
+                  }}
+                  disabled={registering}
+                  className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                >
+                  {registering ? 'Registering...' : `Register & Pay $${selectedCategoryForPlayer.individual_player_fee?.toFixed(2) || '0.00'}`}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-            {/* Hide registration for organizers - they create tournaments, not register */}
-            {!isOrganizer && !isCoach && user?.user_type !== 'Judge' && (
-              <>
-                {/* Show Register button for players only (not coaches/judges) */}
-                {isUpcoming && !showRegistrationForm && !registration ? (
-                  <button
-                    onClick={handleRegisterClick}
-                    className="px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition duration-200 flex items-center"
-                  >
-                    <FiUser className="w-4 h-4 mr-2" />
-                    Register Tournament
-                  </button>
-                ) : (
-                  // Show Close button when registration form is visible, or when already registered, or tournament is closed
-                  !showRegistrationForm && (
-                    <button
-                      onClick={onClose}
-                      className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-                    >
-                      Close
-                    </button>
-                  )
-                )}
-                {registration && registration.payment_status === 'Pending' && onPayment && (
-                  <button
-                    onClick={() => {
-                      onPayment(registration);
-                      onClose();
-                    }}
-                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition duration-200"
-                  >
-                    Pay Entry Fee
-                  </button>
-                )}
-              </>
-            )}
-            {/* For organizers, just show Close button */}
-            {isOrganizer && (
-              <button
-                onClick={onClose}
-                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-              >
-                Close
-              </button>
-            )}
+            <button
+              onClick={onClose}
+              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+            >
+              Close
+            </button>
           </div>
 
-          {/* Registration Form - Only for players (not coaches/judges/organizers) */}
-          {!isOrganizer && !isCoach && user?.user_type !== 'Judge' && showRegistrationForm && (
+          {/* Registration Form - REMOVED: Players cannot register themselves */}
+          {false && !isOrganizer && !isCoach && user?.user_type !== 'Judge' && showRegistrationForm && (
             <div className="mt-6 p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-gray-800 flex items-center">
@@ -1062,8 +1283,21 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
       </div>
 
       {/* PayHere Payment Modal */}
-      {showPaymentModal && pendingRegistration && tournament && pendingCategory && (
+      {(() => {
+        const shouldRender = showPaymentModal && pendingRegistration && tournament && pendingCategory;
+        console.log('TournamentDetailModal: Payment modal render check:', {
+          showPaymentModal,
+          hasPendingRegistration: !!pendingRegistration,
+          hasTournament: !!tournament,
+          hasPendingCategory: !!pendingCategory,
+          shouldRender,
+          registrationId: pendingRegistration?._id,
+          categoryId: pendingCategory?._id
+        });
+        return shouldRender;
+      })() && (
         <PayHerePaymentModal
+          key={`payment-modal-${pendingRegistration._id}`}
           isOpen={showPaymentModal}
           onClose={() => {
             setShowPaymentModal(false);

@@ -30,6 +30,11 @@ if (!merchantId || !merchantSecret) {
  * @returns {string} The uppercase MD5 hash string.
  */
 const generateHash = (orderId, amount) => {
+  // Validate merchant credentials
+  if (!merchantId || !merchantSecret) {
+    throw new Error('PayHere merchant ID or secret is not configured');
+  }
+  
   // Hash the merchant secret first, as per PayHere documentation.
   const hashedSecret = crypto
     .createHash('md5')
@@ -38,21 +43,33 @@ const generateHash = (orderId, amount) => {
     .toUpperCase();
   
   // Format the amount to two decimal places without commas.
+  // PayHere requires the amount to be formatted as "1000.00" (no commas, exactly 2 decimal places)
   const amountFormatted = parseFloat(amount)
-    .toLocaleString("en-us", { minimumFractionDigits: 2 })
-    .replace(/,/g, "");
+    .toFixed(2);
   
   const currency = "LKR";
   
-  // Concatenate the required fields in the correct order.
+  // Concatenate the required fields in the correct order: merchant_id + order_id + amount + currency + hashed_secret
   const hashString = `${merchantId}${orderId}${amountFormatted}${currency.toUpperCase()}${hashedSecret}`;
   
+  console.log('PayHere Hash Generation:', {
+    merchantId,
+    orderId,
+    amount: amountFormatted,
+    currency: currency.toUpperCase(),
+    hashString: hashString.substring(0, 50) + '...' // Log partial hash string for debugging
+  });
+  
   // Return the final MD5 hash of the concatenated string.
-  return crypto
+  const finalHash = crypto
     .createHash('md5')
     .update(hashString)
     .digest('hex')
     .toUpperCase();
+  
+  console.log('PayHere Generated Hash:', finalHash);
+  
+  return finalHash;
 };
 
 /**

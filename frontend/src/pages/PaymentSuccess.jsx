@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { paymentService } from '../services/paymentService';
-import { FiCheckCircle, FiDownload } from 'react-icons/fi';
+import { FiCheckCircle, FiDownload, FiRefreshCw } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Layout from '../components/Layout';
 
@@ -10,25 +10,61 @@ const PaymentSuccess = () => {
   const navigate = useNavigate();
   const [payment, setPayment] = useState(null);
   const [loading, setLoading] = useState(true);
-  const paymentId = searchParams.get('payment_id');
+  const [verifying, setVerifying] = useState(false);
+  
+  // Handle both payment_id and order_id (PayHere uses order_id)
+  const paymentId = searchParams.get('payment_id') || searchParams.get('order_id');
+  const orderId = searchParams.get('order_id');
+  const statusCode = searchParams.get('status_code');
 
   useEffect(() => {
-    if (paymentId) {
+    if (paymentId || orderId) {
       loadPaymentDetails();
     } else {
       setLoading(false);
     }
-  }, [paymentId]);
+  }, [paymentId, orderId]);
 
   const loadPaymentDetails = async () => {
     try {
-      const response = await paymentService.getPayment(paymentId);
+      const idToUse = paymentId || orderId;
+      const response = await paymentService.getPayment(idToUse);
       setPayment(response.data);
+      
+      // If PayHere returned with status_code, verify payment status
+      if (statusCode && statusCode === '2') {
+        // Payment was successful according to PayHere
+        // The callback should have already updated the payment status
+        // But we can refresh to ensure we have the latest status
+        setTimeout(() => {
+          verifyPaymentStatus(idToUse);
+        }, 2000);
+      }
     } catch (error) {
       console.error('Error loading payment:', error);
       toast.error('Failed to load payment details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const verifyPaymentStatus = async (id) => {
+    setVerifying(true);
+    try {
+      const response = await paymentService.getPayment(id);
+      setPayment(response.data);
+      
+      if (response.data.payment_status === 'Completed') {
+        toast.success('Payment verified successfully!');
+      } else if (response.data.payment_status === 'Pending') {
+        toast.info('Payment is being processed. Please wait a moment...');
+        // Retry after 3 seconds
+        setTimeout(() => verifyPaymentStatus(id), 3000);
+      }
+    } catch (error) {
+      console.error('Error verifying payment:', error);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -59,7 +95,11 @@ const PaymentSuccess = () => {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Transaction ID:</span>
-                  <span className="font-semibold text-gray-800">{payment.transaction_id}</span>
+                  <span className="font-semibold text-gray-800">{payment.transaction_id || payment._id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Order ID:</span>
+                  <span className="font-semibold text-gray-800">{payment._id}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Amount:</span>
@@ -67,7 +107,14 @@ const PaymentSuccess = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
-                  <span className="font-semibold text-green-600">{payment.payment_status}</span>
+                  <span className={`font-semibold ${
+                    payment.payment_status === 'Completed' ? 'text-green-600' :
+                    payment.payment_status === 'Pending' ? 'text-yellow-600' :
+                    'text-red-600'
+                  }`}>
+                    {payment.payment_status}
+                    {verifying && <FiRefreshCw className="inline-block ml-2 animate-spin" />}
+                  </span>
                 </div>
                 {payment.tournament_id && (
                   <div className="flex justify-between">
@@ -77,17 +124,52 @@ const PaymentSuccess = () => {
                     </span>
                   </div>
                 )}
+                {payment.registration_id && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Registration:</span>
+                    <span className="font-semibold text-gray-800">
+                      {payment.registration_id.registration_type || 'N/A'}
+                    </span>
+                  </div>
+                )}
+                {payment.payment_date && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Payment Date:</span>
+                    <span className="font-semibold text-gray-800">
+                      {new Date(payment.payment_date).toLocaleString()}
+                    </span>
+                  </div>
+                )}
               </div>
+            </div>
+          )}
+
+          {statusCode && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>PayHere Status:</strong> {statusCode === '2' ? 'Payment Successful' : `Status Code: ${statusCode}`}
+              </p>
             </div>
           )}
 
           <div className="space-y-3">
             <button
-              onClick={() => navigate('/player/matches')}
+              onClick={() => navigate('/player/tournaments')}
               className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition font-semibold"
             >
-              Go to My Matches
+              Go to Tournaments
             </button>
+            <button
+              onClick={() => navigate('/player/matches')}
+              className="w-full bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition font-semibold"
+            >
+              View My Matches
+            </button>
+            {payment && payment.registration_id && (
+              <p className="text-sm text-gray-600 text-center mt-2">
+                Your registration has been confirmed. You will receive a confirmation email shortly.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -96,4 +178,5 @@ const PaymentSuccess = () => {
 };
 
 export default PaymentSuccess;
+
 

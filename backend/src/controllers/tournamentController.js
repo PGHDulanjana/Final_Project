@@ -142,17 +142,73 @@ const createTournament = async (req, res, next) => {
       }
     }
 
-    const tournament = await Tournament.create({
+    // Ensure dates are properly formatted
+    const tournamentData = {
       ...req.body,
-      organizer_id: organizer._id
+      organizer_id: organizer._id,
+      start_date: new Date(req.body.start_date),
+      end_date: new Date(req.body.end_date),
+      registration_deadline: new Date(req.body.registration_deadline)
+    };
+
+    // Remove undefined/null values for optional fields
+    if (!tournamentData.description) delete tournamentData.description;
+    if (!tournamentData.rules) delete tournamentData.rules;
+    if (!tournamentData.max_participants) delete tournamentData.max_participants;
+    if (!tournamentData.bank_account_holder_name) delete tournamentData.bank_account_holder_name;
+    if (!tournamentData.bank_name) delete tournamentData.bank_name;
+    if (!tournamentData.bank_account_number) delete tournamentData.bank_account_number;
+    if (!tournamentData.bank_branch) delete tournamentData.bank_branch;
+    if (!tournamentData.bank_swift_code) delete tournamentData.bank_swift_code;
+
+    console.log('🔵 Creating tournament with data:', {
+      tournament_name: tournamentData.tournament_name,
+      organizer_id: tournamentData.organizer_id,
+      start_date: tournamentData.start_date,
+      end_date: tournamentData.end_date,
+      registration_deadline: tournamentData.registration_deadline,
+      status: tournamentData.status || 'Draft'
     });
+
+    const tournament = await Tournament.create(tournamentData);
+
+    console.log('✅ Tournament created successfully:', tournament._id);
+    
+    // Verify tournament was saved by querying it back
+    const savedTournament = await Tournament.findById(tournament._id);
+    if (!savedTournament) {
+      console.error('❌ Tournament was not saved to database!');
+      return res.status(500).json({
+        success: false,
+        message: 'Tournament creation failed. Please try again.'
+      });
+    }
+    console.log('✅ Verified tournament saved to database:', savedTournament._id);
+
+    // Populate organizer details before sending response
+    const populatedTournament = await Tournament.findById(tournament._id)
+      .populate({
+        path: 'organizer_id',
+        select: 'organization_name user_id',
+        populate: {
+          path: 'user_id',
+          select: 'first_name last_name username'
+        }
+      });
 
     res.status(201).json({
       success: true,
       message: 'Tournament created successfully',
-      data: tournament
+      data: populatedTournament
     });
   } catch (error) {
+    console.error('❌ Error creating tournament:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      errors: error.errors,
+      code: error.code
+    });
     next(error);
   }
 };

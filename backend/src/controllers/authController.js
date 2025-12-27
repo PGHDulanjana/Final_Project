@@ -761,6 +761,104 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+// @desc    Register admin user
+// @route   POST /api/auth/register-admin
+// @access  Public (but requires admin registration key)
+const registerAdmin = async (req, res, next) => {
+  try {
+    const { 
+      username, 
+      email, 
+      password_hash, 
+      first_name, 
+      last_name, 
+      phone,
+      admin_registration_key
+    } = req.body;
+
+    // Validate required fields
+    if (!username || !email || !password_hash || !first_name || !last_name) {
+      return res.status(400).json({
+        success: false,
+        message: 'All required fields must be provided'
+      });
+    }
+
+    // Validate admin registration key
+    // Option 1: Check if admin_registration_key matches environment variable
+    const validAdminKey = process.env.ADMIN_REGISTRATION_KEY || 'ADMIN_REG_KEY_2024';
+    
+    // Option 2: Allow registration if no admins exist in the system
+    const existingAdmins = await User.countDocuments({ user_type: 'Admin' });
+    
+    if (existingAdmins > 0) {
+      // If admins exist, require the registration key
+      if (!admin_registration_key || admin_registration_key !== validAdminKey) {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid admin registration key. Please contact the system administrator.'
+        });
+      }
+    }
+    // If no admins exist, allow registration without key (for initial setup)
+
+    // Check if user exists
+    const existingUser = await User.findOne({
+      $or: [{ email }, { username }]
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User already exists with this email or username'
+      });
+    }
+
+    // Create admin user
+    const userData = {
+      username: username.trim(),
+      email: email.trim().toLowerCase(),
+      password_hash,
+      first_name: first_name.trim(),
+      last_name: last_name.trim(),
+      user_type: 'Admin',
+      is_active: true
+    };
+    
+    // Add optional phone if provided
+    if (phone && phone.trim() !== '') {
+      userData.phone = phone.trim();
+    }
+
+    const user = await User.create(userData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Admin account created successfully',
+      data: {
+        user: {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          user_type: user.user_type
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Admin registration error:', error);
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({
+        success: false,
+        message: `${field} already exists`
+      });
+    }
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -768,6 +866,7 @@ module.exports = {
   logout,
   forgotPassword,
   verifyOTP,
-  resetPassword
+  resetPassword,
+  registerAdmin
 };
 

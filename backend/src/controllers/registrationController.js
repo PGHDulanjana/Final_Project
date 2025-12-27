@@ -41,6 +41,22 @@ const getRegistrations = async (req, res, next) => {
       }
     }
 
+    // If user is a Judge, filter judge registrations by their judge_id
+    // This ensures judges only see their own judge registrations, not other judges'
+    if (req.user.user_type === 'Judge') {
+      const Judge = require('../models/Judge');
+      const judge = await Judge.findOne({ user_id: req.user._id });
+      if (judge) {
+        // For Judge registrations, only show this judge's registrations
+        // For other registration types, show all (judges might need to see player/team registrations for matches they're judging)
+        // Build the filter: (Judge registration AND this judge) OR (not a Judge registration)
+        query.$or = [
+          { registration_type: 'Judge', judge_id: judge._id },
+          { registration_type: { $ne: 'Judge' } }
+        ];
+      }
+    }
+
     const registrations = await Registration.find(query)
       .populate('tournament_id', 'tournament_name start_date end_date venue status')
       .populate('category_id', 'category_name individual_player_fee team_event_fee category_type participation_type team_size')
@@ -147,62 +163,97 @@ const createRegistration = async (req, res, next) => {
     }
 
     // Validate user type matches registration type
-    // Allow coaches to register players for Individual events (when player_id is provided)
+    // Players can now register themselves if their coach is registered for the tournament
+    // Use let for playerIdToUse since we may need to reassign it
+    let playerIdToUse = player_id;
+    
     if (registration_type === 'Individual') {
-      if (player_id) {
-        // Coach is registering a player - verify coach has permission
-        if (req.user.user_type === 'Coach') {
-          const Player = require('../models/Player');
-          const player = await Player.findById(player_id).populate('coach_id');
-          
-          if (!player) {
-            return res.status(404).json({
-              success: false,
-              message: 'Player not found'
-            });
-          }
-          
-          // Verify coach has permission to register this player
-          const Coach = require('../models/Coach');
-          const coachProfile = await Coach.findOne({ user_id: req.user._id });
-          
-          if (coachProfile) {
-            const playerCoachId = player.coach_id?._id || player.coach_id;
-            const isPlayerCoach = playerCoachId && playerCoachId.toString() === coachProfile._id.toString();
-            
-            // Also check by coach_name if coach_id doesn't match
-            let isAuthorized = isPlayerCoach;
-            if (!isAuthorized && player.coach_name) {
-              const User = require('../models/User');
-              const coachUser = await User.findById(req.user._id);
-              if (coachUser) {
-                const coachFullName = `${coachUser.first_name || ''} ${coachUser.last_name || ''}`.trim().toLowerCase();
-                const playerCoachName = (player.coach_name || '').toLowerCase();
-                isAuthorized = playerCoachName.includes(coachFullName) || 
-                              coachFullName.includes(playerCoachName) ||
-                              playerCoachName.includes(coachUser.first_name?.toLowerCase() || '') ||
-                              playerCoachName.includes(coachUser.last_name?.toLowerCase() || '');
-              }
-            }
-            
-            if (!isAuthorized) {
-              return res.status(403).json({
-                success: false,
-                message: 'You are not authorized to register this player. Player must be under your coaching.'
-              });
-            }
-          }
-        } else if (req.user.user_type !== 'Player') {
-          return res.status(403).json({
+      const Player = require('../models/Player');
+      const Coach = require('../models/Coach');
+      
+      // If player is registering themselves
+      if (req.user.user_type === 'Player') {
+        // Find player profile
+        const playerProfile = await Player.findOne({ user_id: req.user._id }).populate('coach_id');
+        
+        if (!playerProfile) {
+          return res.status(404).json({
             success: false,
-            message: 'Only players or coaches can register for individual events'
+            message: 'Player profile not found. Please complete your player profile first.'
           });
         }
-      } else if (req.user.user_type !== 'Player') {
-        // No player_id provided and user is not a player - they must be registering themselves
+        
+        // Check if player has a coach assigned (for organizational purposes, but not required for registration)
+        const playerCoachId = playerProfile.coach_id?._id || playerProfile.coach_id;
+        
+        // Use the player's own profile ID
+        if (!playerProfile._id) {
+          return res.status(500).json({
+            success: false,
+            message: 'Player profile ID is missing. Please contact support.'
+          });
+        }
+        playerIdToUse = playerProfile._id;
+        console.log('🔵 Player self-registration: Set playerIdToUse to:', playerIdToUse);
+      } 
+      // If coach is registering a player (existing flow)
+      else if (req.user.user_type === 'Coach') {
+        // Player_id is required for Individual registrations when coach registers
+        if (!player_id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Player ID is required when registering a player.'
+          });
+        }
+        
+        // Coach is registering a player - verify coach has permission
+        const player = await Player.findById(player_id).populate('coach_id');
+        
+        if (!player) {
+          return res.status(404).json({
+            success: false,
+            message: 'Player not found'
+          });
+        }
+        
+        // Verify coach has permission to register this player
+        const coachProfile = await Coach.findOne({ user_id: req.user._id });
+        
+        if (!coachProfile) {
+          return res.status(403).json({
+            success: false,
+            message: 'Coach profile not found'
+          });
+        }
+        
+        const playerCoachId = player.coach_id?._id || player.coach_id;
+        const isPlayerCoach = playerCoachId && playerCoachId.toString() === coachProfile._id.toString();
+        
+        // Also check by coach_name if coach_id doesn't match
+        let isAuthorized = isPlayerCoach;
+        if (!isAuthorized && player.coach_name) {
+          const User = require('../models/User');
+          const coachUser = await User.findById(req.user._id);
+          if (coachUser) {
+            const coachFullName = `${coachUser.first_name || ''} ${coachUser.last_name || ''}`.trim().toLowerCase();
+            const playerCoachName = (player.coach_name || '').toLowerCase();
+            isAuthorized = playerCoachName.includes(coachFullName) || 
+                          coachFullName.includes(playerCoachName) ||
+                          playerCoachName.includes(coachUser.first_name?.toLowerCase() || '') ||
+                          playerCoachName.includes(coachUser.last_name?.toLowerCase() || '');
+          }
+        }
+        
+        if (!isAuthorized) {
+          return res.status(403).json({
+            success: false,
+            message: 'You are not authorized to register this player. Player must be under your coaching.'
+          });
+        }
+      } else {
         return res.status(403).json({
           success: false,
-          message: 'Only players can register themselves individually for tournaments'
+          message: 'Only players and coaches can register for individual events.'
         });
       }
     }
@@ -274,46 +325,54 @@ const createRegistration = async (req, res, next) => {
       });
     }
 
-    // For individual registration, use current user's player profile
-    let playerId = player_id;
-    if (registration_type === 'Individual' && !playerId) {
-      let player = await Player.findOne({ user_id: req.user._id });
-      
-      // Auto-create player profile if it doesn't exist
-      if (!player) {
-        // Calculate age category from user's date_of_birth if available
-        let ageCategory = '22-34'; // Default age category
-        if (req.user.date_of_birth) {
-          const today = new Date();
-          const birthDate = new Date(req.user.date_of_birth);
-          let age = today.getFullYear() - birthDate.getFullYear();
-          const monthDiff = today.getMonth() - birthDate.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-          }
-          
-          if (age < 10) ageCategory = 'Under 10';
-          else if (age >= 10 && age <= 12) ageCategory = '10-12';
-          else if (age >= 13 && age <= 15) ageCategory = '13-15';
-          else if (age >= 16 && age <= 17) ageCategory = '16-17';
-          else if (age >= 18 && age <= 21) ageCategory = '18-21';
-          else if (age >= 22 && age <= 34) ageCategory = '22-34';
-          else ageCategory = '35+';
-        }
-        
-        // Create basic player profile with default values
-        player = await Player.create({
-          user_id: req.user._id,
-          belt_rank: 'White', // Default belt rank
-          age_category: ageCategory,
-          emergency_contact: {
-            name: req.user.first_name + ' ' + req.user.last_name,
-            phone: req.user.phone || '0000000000',
-            relationship: 'Self'
-          }
+    // For individual registration, playerIdToUse should be set by now
+    // (either from req.body for coaches, or set above for players registering themselves)
+    // Use playerIdToUse instead of reassigning const player_id
+    let playerId = playerIdToUse;
+    
+    console.log('🔵 Registration: player_id from body:', req.body.player_id);
+    console.log('🔵 Registration: playerIdToUse after processing:', playerIdToUse);
+    console.log('🔵 Registration: playerId variable:', playerId);
+    console.log('🔵 Registration: registration_type:', registration_type);
+    console.log('🔵 Registration: user_type:', req.user.user_type);
+    
+    // Ensure playerId is set for Individual registrations
+    if (registration_type === 'Individual' && !playerId && req.user.user_type === 'Player') {
+      // Fallback: try to get player profile again if playerId is still not set
+      const Player = require('../models/Player');
+      const playerProfile = await Player.findOne({ user_id: req.user._id });
+      if (playerProfile && playerProfile._id) {
+        playerId = playerProfile._id;
+        playerIdToUse = playerProfile._id;
+        console.log('🔵 Registration: Fallback - Set playerId to:', playerId);
+      } else {
+        console.error('🔵 Registration: ERROR - Could not find player profile for user:', req.user._id);
+        return res.status(500).json({
+          success: false,
+          message: 'Player profile not found. Please contact support.'
         });
       }
-      playerId = player._id;
+    }
+    
+    // Final validation for Individual registrations
+    if (registration_type === 'Individual' && !playerId) {
+      console.error('🔵 Registration: ERROR - playerId is still null/undefined for Individual registration');
+      return res.status(400).json({
+        success: false,
+        message: 'Player ID is required for individual event registration.'
+      });
+    }
+    
+    // Verify player exists (if playerId is set)
+    if (registration_type === 'Individual' && playerId) {
+      const Player = require('../models/Player');
+      const player = await Player.findById(playerId);
+      if (!player) {
+        return res.status(404).json({
+          success: false,
+          message: 'Player not found'
+        });
+      }
     }
 
     // Handle Judge and Coach registrations
@@ -321,35 +380,213 @@ const createRegistration = async (req, res, next) => {
       const Judge = require('../models/Judge');
       let judge = await Judge.findOne({ user_id: req.user._id });
       
+      // Auto-create judge profile if it doesn't exist (similar to coach auto-creation)
       if (!judge) {
-        return res.status(404).json({
-          success: false,
-          message: 'Judge profile not found. Please complete your judge profile first.'
-        });
+        try {
+          judge = await Judge.create({
+            user_id: req.user._id,
+            certification_level: 'National', // Default to 'National' (must be a valid enum value)
+            experience_years: 0,
+            specialization: [], // Default empty array
+            is_certified: false,
+            is_available: true
+          });
+          console.log('Auto-created judge profile for registration:', judge._id);
+        } catch (createError) {
+          console.error('Error auto-creating judge profile:', createError);
+          console.error('Create error details:', {
+            name: createError.name,
+            message: createError.message,
+            errors: createError.errors
+          });
+          return res.status(500).json({
+            success: false,
+            message: 'Failed to create judge profile. Please contact support.',
+            error: process.env.NODE_ENV === 'development' ? createError.message : undefined
+          });
+        }
       }
 
+      // Validate judge._id exists
+      if (!judge || !judge._id) {
+        console.error('Judge profile or judge._id is missing:', { judge });
+        return res.status(500).json({
+          success: false,
+          message: 'Judge profile is invalid. Please contact support.'
+        });
+      }
+      
+      const finalJudgeId = judge._id;
+      console.log('🔵 Judge registration: Using judge_id from profile:', finalJudgeId.toString());
+
       // Check if already registered for this tournament
-      const existingRegistration = await Registration.findOne({
-        tournament_id,
+      const tournamentIdStr = String(tournament_id);
+      const judgeIdStr = String(finalJudgeId);
+      
+      console.log('🔵 Checking for existing judge registration:', {
+        tournament_id: tournamentIdStr,
+        judge_id: judgeIdStr,
         registration_type: 'Judge',
-        judge_id: judge._id
+        judge_profile_id: finalJudgeId.toString()
+      });
+      
+      const existingRegistration = await Registration.findOne({
+        tournament_id: tournament_id,
+        registration_type: 'Judge',
+        judge_id: finalJudgeId
       });
 
       if (existingRegistration) {
-        return res.status(400).json({
-          success: false,
-          message: 'Already registered for this tournament as a judge'
-        });
+        // Double-check: verify the judge_id actually matches
+        const regJudgeId = existingRegistration.judge_id?.toString();
+        if (regJudgeId === judgeIdStr) {
+          console.log('⚠️ Judge already registered for tournament:', {
+            tournament_id: tournamentIdStr,
+            judge_id: judgeIdStr,
+            existing_registration_id: existingRegistration._id.toString(),
+            existing_judge_id: regJudgeId
+          });
+          return res.status(400).json({
+            success: false,
+            message: 'Already registered for this tournament as a judge',
+            errors: [{
+              field: 'judge_id',
+              message: `You are already registered for this tournament. Registration ID: ${existingRegistration._id}`
+            }]
+          });
+        } else {
+          // False positive - registration exists but judge_id doesn't match
+          console.log('⚠️ Found registration but judge_id mismatch - treating as new registration:', {
+            tournament_id: tournamentIdStr,
+            expected_judge_id: judgeIdStr,
+            found_judge_id: regJudgeId
+          });
+        }
       }
+      
+      console.log('✅ No existing registration found, proceeding with judge registration');
 
-      const registration = await Registration.create({
-        tournament_id,
-        category_id: null, // Judges register for tournament, not specific events
-        judge_id: judge._id,
-        registration_type: 'Judge',
-        approval_status: 'Approved', // Auto-approve judge registrations
-        payment_status: 'Paid' // No payment required for judges
-      });
+      let registration;
+      try {
+        console.log('Creating judge registration with:', {
+          tournament_id: String(tournament_id),
+          category_id: null,
+          judge_id: String(finalJudgeId),
+          registration_type: 'Judge',
+          approval_status: 'Approved',
+          payment_status: 'Paid'
+        });
+
+        // Create registration - explicitly exclude player_id, team_id, coach_id, category_id
+        // For sparse indexes to work correctly, we must use undefined (not null) for fields we don't want indexed
+        const judgeRegistrationData = {
+          tournament_id,
+          judge_id: finalJudgeId,
+          registration_type: 'Judge',
+          approval_status: 'Approved', // Auto-approve judge registrations
+          payment_status: 'Paid' // No payment required for judges
+        };
+        // Explicitly set fields to undefined to avoid null values in sparse indexes
+        // This ensures sparse indexes ignore these fields for Judge registrations
+        judgeRegistrationData.category_id = undefined; // Judges register for tournament, not specific events
+        judgeRegistrationData.player_id = undefined;
+        judgeRegistrationData.team_id = undefined;
+        judgeRegistrationData.coach_id = undefined;
+        
+        registration = await Registration.create(judgeRegistrationData);
+        
+        console.log('✅ Judge registration created successfully:', registration._id);
+      } catch (createError) {
+        console.error('Judge registration creation error:', createError);
+        console.error('Error name:', createError.name);
+        console.error('Error code:', createError.code);
+        console.error('Error message:', createError.message);
+        console.error('Error errors:', createError.errors);
+        console.error('Error keyPattern:', createError.keyPattern);
+        console.error('Error keyValue:', createError.keyValue);
+        
+        // Handle duplicate key error (unique index violation)
+        if (createError.code === 11000 || createError.code === 11001) {
+          // Check the error message to see which index caused the conflict
+          const errorMessage = createError.message || '';
+          const isJudgeDuplicate = errorMessage.includes('tournament_id_1_judge_id_1') || 
+                                   errorMessage.includes('judge_id');
+          
+          if (isJudgeDuplicate) {
+            // Try to find the existing registration
+            let duplicateCheck = await Registration.findOne({
+              tournament_id: tournament_id,
+              registration_type: 'Judge',
+              judge_id: finalJudgeId
+            });
+            
+            // If not found, try with string comparison as fallback
+            if (!duplicateCheck) {
+              const allJudgeRegs = await Registration.find({
+                tournament_id: tournament_id,
+                registration_type: 'Judge'
+              });
+              const judgeIdStr = String(finalJudgeId);
+              duplicateCheck = allJudgeRegs.find(reg => {
+                const regJudgeId = reg.judge_id?._id?.toString() || reg.judge_id?.toString();
+                return regJudgeId === judgeIdStr;
+              });
+            }
+            
+            if (duplicateCheck) {
+              console.log('⚠️ Duplicate judge registration detected:', {
+                tournament_id: String(tournament_id),
+                judge_id: String(finalJudgeId),
+                existing_registration_id: duplicateCheck._id.toString()
+              });
+              return res.status(400).json({
+                success: false,
+                message: 'Already registered for this tournament as a judge',
+                errors: [{ field: 'judge_id', message: 'You are already registered for this tournament' }]
+              });
+            } else {
+              // Duplicate key error but couldn't find the registration - might be a race condition
+              console.warn('⚠️ Duplicate key error but registration not found (possible race condition):', {
+                tournament_id: String(tournament_id),
+                judge_id: String(finalJudgeId),
+                error: errorMessage
+              });
+              return res.status(400).json({
+                success: false,
+                message: 'Already registered for this tournament as a judge. Please refresh the page to see your registration.',
+                errors: [{ field: 'judge_id', message: 'Duplicate registration detected' }]
+              });
+            }
+          } else {
+            // Other duplicate key error (not judge-related)
+            console.error('Unique index violation (not judge):', {
+              tournament_id,
+              judge_id: finalJudgeId,
+              error: errorMessage
+            });
+            return res.status(500).json({
+              success: false,
+              message: 'Registration failed due to database constraint. Please try again or contact support.',
+              error: process.env.NODE_ENV === 'development' ? createError.message : undefined
+            });
+          }
+        }
+        
+        if (createError.name === 'ValidationError') {
+          const validationErrors = Object.values(createError.errors || {}).map(err => ({
+            field: err.path,
+            message: err.message
+          }));
+          return res.status(400).json({
+            success: false,
+            message: 'Validation failed: ' + validationErrors.map(e => `${e.field}: ${e.message}`).join(', '),
+            errors: validationErrors
+          });
+        }
+        
+        // Re-throw other errors to be handled by outer catch
+        throw createError;
+      }
 
       res.status(201).json({
         success: true,
@@ -382,7 +619,7 @@ const createRegistration = async (req, res, next) => {
           return res.status(500).json({
             success: false,
             message: 'Failed to create coach profile. Please contact support.',
-            error: createError.message
+            error: process.env.NODE_ENV === 'development' ? createError.message : undefined
           });
         }
       }
@@ -395,30 +632,47 @@ const createRegistration = async (req, res, next) => {
           message: 'Coach profile is invalid. Please contact support.'
         });
       }
+      
+      // Always use the coach profile found by user_id, ignore any coach_id from request body
+      // This ensures we use the correct coach profile associated with the authenticated user
+      const finalCoachId = coach._id;
+      console.log('🔵 Coach registration: Using coach_id from profile:', finalCoachId.toString());
 
       // Check if already registered for this tournament
       // Use coach_id as the primary check (most reliable)
-      const tournamentIdStr = tournament_id.toString();
-      const coachIdStr = coach._id.toString();
+      const tournamentIdStr = String(tournament_id);
+      const coachIdStr = String(finalCoachId);
       
       console.log('🔵 Checking for existing coach registration:', {
         tournament_id: tournamentIdStr,
         coach_id: coachIdStr,
         registration_type: 'Coach',
-        coach_profile_id: coach._id.toString()
+        coach_profile_id: finalCoachId.toString()
       });
       
       // Primary check: Find registration by exact coach_id match
-      // Use direct query with coach_id (MongoDB will handle ObjectId conversion)
-      const existingRegistration = await Registration.findOne({
-        tournament_id: tournamentIdStr,
+      // Use ObjectId for proper matching - try multiple query formats for robustness
+      let existingRegistration = await Registration.findOne({
+        tournament_id: tournament_id,
         registration_type: 'Coach',
-        coach_id: coachIdStr
+        coach_id: finalCoachId
       });
+      
+      // If not found, try with string comparison as fallback
+      if (!existingRegistration) {
+        const allCoachRegs = await Registration.find({
+          tournament_id: tournament_id,
+          registration_type: 'Coach'
+        });
+        existingRegistration = allCoachRegs.find(reg => {
+          const regCoachId = reg.coach_id?._id?.toString() || reg.coach_id?.toString();
+          return regCoachId === coachIdStr;
+        });
+      }
 
       if (existingRegistration) {
         // Double-check: verify the coach_id actually matches (handle edge cases)
-        const regCoachId = existingRegistration.coach_id?.toString();
+        const regCoachId = existingRegistration.coach_id?._id?.toString() || existingRegistration.coach_id?.toString();
         if (regCoachId === coachIdStr) {
           console.log('⚠️ Coach already registered for tournament:', {
             tournament_id: tournamentIdStr,
@@ -449,22 +703,29 @@ const createRegistration = async (req, res, next) => {
       let registration;
       try {
         console.log('Creating coach registration with:', {
-          tournament_id,
+          tournament_id: String(tournament_id),
           category_id: null,
-          coach_id: coach._id,
+          coach_id: String(finalCoachId),
           registration_type: 'Coach',
           approval_status: 'Approved',
           payment_status: 'Paid'
         });
         
-        registration = await Registration.create({
-          tournament_id,
-          category_id: null, // Coaches register for tournament, not specific events
-          coach_id: coach._id,
+        // Create registration - use undefined for fields not needed to avoid sparse index conflicts
+        const coachRegistrationData = {
+          tournament_id: tournament_id,
+          coach_id: finalCoachId, // Always use the coach profile found by user_id
           registration_type: 'Coach',
           approval_status: 'Approved', // Auto-approve coach registrations
           payment_status: 'Paid' // No payment required for coaches
-        });
+        };
+        // Explicitly set fields to undefined to avoid null values in sparse indexes
+        coachRegistrationData.category_id = undefined; // Coaches register for tournament, not specific events
+        coachRegistrationData.player_id = undefined;
+        coachRegistrationData.team_id = undefined;
+        coachRegistrationData.judge_id = undefined;
+        
+        registration = await Registration.create(coachRegistrationData);
         
         console.log('Coach registration created successfully:', registration._id);
       } catch (createError) {
@@ -476,25 +737,50 @@ const createRegistration = async (req, res, next) => {
         
         // Handle duplicate key error (unique index violation)
         if (createError.code === 11000 || createError.code === 11001) {
-          // Check if this is actually a duplicate for this coach
-          const duplicateCheck = await Registration.findOne({
-            tournament_id,
-            registration_type: 'Coach',
-            coach_id: coach._id
-          });
+          // Check the error message to see which index caused the conflict
+          const errorMessage = createError.message || '';
+          const isCoachDuplicate = errorMessage.includes('tournament_id_1_coach_id_1') || 
+                                   errorMessage.includes('coach_id');
           
-          if (duplicateCheck) {
-            return res.status(400).json({
-              success: false,
-              message: 'Already registered for this tournament as a coach',
-              errors: [{ field: 'coach_id', message: 'Duplicate registration' }]
+          if (isCoachDuplicate) {
+            // Try to find the existing registration
+            const duplicateCheck = await Registration.findOne({
+              tournament_id: tournament_id,
+              registration_type: 'Coach',
+              coach_id: finalCoachId
             });
+            
+            if (duplicateCheck) {
+              console.log('⚠️ Duplicate coach registration detected:', {
+                tournament_id: String(tournament_id),
+                coach_id: String(finalCoachId),
+                existing_registration_id: duplicateCheck._id.toString()
+              });
+              return res.status(400).json({
+                success: false,
+                message: 'Already registered for this tournament as a coach',
+                errors: [{ field: 'coach_id', message: 'You are already registered for this tournament' }]
+              });
+            } else {
+              // Duplicate key error but couldn't find the registration - might be a race condition
+              // Still return a user-friendly message
+              console.warn('⚠️ Duplicate key error but registration not found (possible race condition):', {
+                tournament_id: String(tournament_id),
+                coach_id: String(finalCoachId),
+                error: errorMessage
+              });
+              return res.status(400).json({
+                success: false,
+                message: 'Already registered for this tournament as a coach. Please refresh the page to see your registration.',
+                errors: [{ field: 'coach_id', message: 'Duplicate registration detected' }]
+              });
+            }
           } else {
-            // Unique index violation but not a duplicate for this coach - might be a data issue
-            console.error('Unique index violation but no duplicate found:', {
+            // Other duplicate key error (not coach-related)
+            console.error('Unique index violation (not coach):', {
               tournament_id,
-              coach_id: coach._id,
-              error: createError.message
+              coach_id: finalCoachId,
+              error: errorMessage
             });
             return res.status(500).json({
               success: false,
@@ -527,29 +813,96 @@ const createRegistration = async (req, res, next) => {
       return;
     }
 
-    // For Individual and Team registrations (existing logic)
-    // Check if already registered for this category
-    const existingRegistration = await Registration.findOne({
-      tournament_id,
-      category_id,
-      $or: [
-        { player_id: playerId },
-        { team_id: team_id }
-      ]
-    });
-
-    if (existingRegistration) {
-      return res.status(400).json({
-        success: false,
-        message: 'Already registered for this event'
+    // For Individual and Team registrations - improved duplicate check
+    // Allow re-registration if payment is Pending or Failed
+    if (registration_type === 'Individual' && playerId) {
+      console.log('🔵 Checking for duplicate Individual registration:', {
+        tournament_id,
+        category_id,
+        player_id: playerId,
+        registration_type: 'Individual'
       });
+      
+      const existingRegistration = await Registration.findOne({
+        tournament_id,
+        category_id,
+        player_id: playerId,
+        registration_type: 'Individual'
+      });
+      
+      console.log('🔵 Existing registration found:', existingRegistration ? existingRegistration._id : 'None');
+
+      if (existingRegistration) {
+        // Only block if payment is already Paid
+        if (existingRegistration.payment_status === 'Paid') {
+          return res.status(400).json({
+            success: false,
+            message: 'Player is already registered and paid for this event',
+            errors: [{
+              field: 'player_id',
+              message: 'This player is already registered and paid for this tournament event'
+            }]
+          });
+        }
+        
+        // If payment is Pending or Failed, return the existing registration so coach can proceed with payment
+        // Don't create a new registration, just return the existing one
+        if (existingRegistration.payment_status === 'Pending' || existingRegistration.payment_status === 'Failed') {
+          return res.status(200).json({
+            success: true,
+            message: 'Registration exists with pending payment. Please complete payment.',
+            data: existingRegistration,
+            requiresPayment: true
+          });
+        }
+      }
+    }
+    
+    if (registration_type === 'Team' && team_id) {
+      const existingRegistration = await Registration.findOne({
+        tournament_id,
+        category_id,
+        team_id: team_id,
+        registration_type: 'Team'
+      });
+
+      if (existingRegistration) {
+        // Only block if payment is already Paid
+        if (existingRegistration.payment_status === 'Paid') {
+          return res.status(400).json({
+            success: false,
+            message: 'Team is already registered and paid for this event',
+            errors: [{
+              field: 'team_id',
+              message: 'This team is already registered and paid for this tournament event'
+            }]
+          });
+        }
+        
+        // If payment is Pending or Failed, return the existing registration
+        if (existingRegistration.payment_status === 'Pending' || existingRegistration.payment_status === 'Failed') {
+          return res.status(200).json({
+            success: true,
+            message: 'Registration exists with pending payment. Please complete payment.',
+            data: existingRegistration,
+            requiresPayment: true
+          });
+        }
+      }
     }
 
     // Determine coach_id for the registration
     let registrationCoachId = req.body.coach_id || null;
     
+    // If player is registering themselves, use their coach_id from their profile
+    if (req.user.user_type === 'Player' && registration_type === 'Individual' && playerId) {
+      const playerProfile = await Player.findById(playerId);
+      if (playerProfile && playerProfile.coach_id) {
+        registrationCoachId = playerProfile.coach_id._id || playerProfile.coach_id;
+      }
+    }
     // If coach is registering a player, use the coach's profile ID
-    if (req.user.user_type === 'Coach' && registration_type === 'Individual' && playerId) {
+    else if (req.user.user_type === 'Coach' && registration_type === 'Individual' && playerId) {
       const Coach = require('../models/Coach');
       const coachProfile = await Coach.findOne({ user_id: req.user._id });
       if (coachProfile) {
@@ -559,47 +912,153 @@ const createRegistration = async (req, res, next) => {
 
     let registration;
     try {
-      registration = await Registration.create({
+      // Ensure playerId is set for Individual registrations
+      // Use playerId (which comes from playerIdToUse) or fallback to player_id from body
+      const finalPlayerId = registration_type === 'Individual' ? (playerId || playerIdToUse || player_id) : null;
+      
+      if (registration_type === 'Individual' && !finalPlayerId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Player ID is required for individual event registration.'
+        });
+      }
+      
+      // Build registration object - only include fields that are relevant
+      const registrationData = {
         tournament_id,
-        category_id,
-        player_id: registration_type === 'Individual' ? playerId : null,
-        team_id: registration_type === 'Team' ? team_id : null,
+        category_id: category_id || null,
         registration_type,
-        coach_id: registrationCoachId
-      });
+        coach_id: registrationCoachId || null
+      };
+      
+      // Only set player_id for Individual registrations
+      if (registration_type === 'Individual' && finalPlayerId) {
+        registrationData.player_id = finalPlayerId;
+      }
+      
+      // Only set team_id for Team registrations
+      if (registration_type === 'Team' && team_id) {
+        registrationData.team_id = team_id;
+      }
+      
+      // Only set judge_id for Judge registrations
+      if (registration_type === 'Judge' && req.user.user_type === 'Judge') {
+        const Judge = require('../models/Judge');
+        const judge = await Judge.findOne({ user_id: req.user._id });
+        if (judge) {
+          registrationData.judge_id = judge._id;
+        }
+      }
+      
+      registration = await Registration.create(registrationData);
     } catch (createError) {
       console.error('Registration creation error:', createError);
+      console.error('Error details:', {
+        code: createError.code,
+        keyPattern: createError.keyPattern,
+        keyValue: createError.keyValue,
+        message: createError.message
+      });
       
       // Handle duplicate key error (unique index violation)
       if (createError.code === 11000 || createError.code === 11001) {
-        // Check what field caused the duplicate
-        const duplicateField = Object.keys(createError.keyPattern || {})[0];
+        const keyPattern = createError.keyPattern || {};
+        const keyValue = createError.keyValue || {};
         
-        if (duplicateField === 'player_id' || duplicateField === 'tournament_id') {
-          // Check if player is already registered for this tournament/category
+        // Check which index caused the conflict
+        if (keyPattern.tournament_id && keyPattern.category_id && keyPattern.player_id) {
+          // Individual registration duplicate
           const existingRegistration = await Registration.findOne({
             tournament_id,
             category_id,
-            player_id: registration_type === 'Individual' ? playerId : null
+            player_id: playerId,
+            registration_type: 'Individual'
+          });
+          
+          if (existingRegistration) {
+            if (existingRegistration.payment_status === 'Paid') {
+              return res.status(400).json({
+                success: false,
+                message: 'You are already registered and paid for this event',
+                errors: [{
+                  field: 'player_id',
+                  message: 'This player is already registered and paid for this tournament event'
+                }]
+              });
+            } else {
+              // Return existing registration for payment completion
+              return res.status(200).json({
+                success: true,
+                message: 'Registration exists with pending payment. Please complete payment.',
+                data: existingRegistration,
+                requiresPayment: true
+              });
+            }
+          }
+        } else if (keyPattern.tournament_id && keyPattern.coach_id) {
+          // Coach registration duplicate
+          const existingRegistration = await Registration.findOne({
+            tournament_id,
+            coach_id: registrationCoachId,
+            registration_type: 'Coach'
           });
           
           if (existingRegistration) {
             return res.status(400).json({
               success: false,
-              message: 'Player is already registered for this event',
+              message: 'You are already registered for this tournament as a coach',
               errors: [{
-                field: 'player_id',
-                message: 'This player is already registered for this tournament event'
+                field: 'coach_id',
+                message: 'Duplicate coach registration'
               }]
             });
           }
+        } else if (keyPattern.tournament_id && keyPattern.judge_id) {
+          // Judge registration duplicate
+          return res.status(400).json({
+            success: false,
+            message: 'You are already registered for this tournament as a judge',
+            errors: [{
+              field: 'judge_id',
+              message: 'Duplicate judge registration'
+            }]
+          });
+        } else if (keyPattern.tournament_id && keyPattern.category_id && keyPattern.team_id) {
+          // Team registration duplicate
+          const existingRegistration = await Registration.findOne({
+            tournament_id,
+            category_id,
+            team_id: team_id,
+            registration_type: 'Team'
+          });
+          
+          if (existingRegistration) {
+            if (existingRegistration.payment_status === 'Paid') {
+              return res.status(400).json({
+                success: false,
+                message: 'Team is already registered and paid for this event',
+                errors: [{
+                  field: 'team_id',
+                  message: 'This team is already registered and paid for this tournament event'
+                }]
+              });
+            } else {
+              return res.status(200).json({
+                success: true,
+                message: 'Registration exists with pending payment. Please complete payment.',
+                data: existingRegistration,
+                requiresPayment: true
+              });
+            }
+          }
         }
         
+        // Generic duplicate error
         return res.status(400).json({
           success: false,
-          message: 'Duplicate registration detected',
+          message: 'Duplicate registration detected. A registration with these details already exists.',
           errors: [{
-            field: duplicateField || 'registration',
+            field: Object.keys(keyPattern)[0] || 'registration',
             message: 'A registration with these details already exists'
           }]
         });
@@ -609,11 +1068,16 @@ const createRegistration = async (req, res, next) => {
       throw createError;
     }
 
-    // Send confirmation email
+    // Send confirmation email (if function is available)
     if (playerId && registration_type === 'Individual') {
-      const user = await Player.findById(playerId).populate('user_id');
-      if (user && user.user_id && user.user_id.email) {
-        await sendRegistrationConfirmation(user.user_id.email, tournament.tournament_name);
+      try {
+        const user = await Player.findById(playerId).populate('user_id');
+        if (user && user.user_id && user.user_id.email && typeof sendRegistrationConfirmation === 'function') {
+          await sendRegistrationConfirmation(user.user_id.email, tournament.tournament_name);
+        }
+      } catch (emailError) {
+        // Don't fail registration if email fails
+        console.error('Error sending registration confirmation email:', emailError);
       }
     }
 
