@@ -69,8 +69,8 @@ const Payments = () => {
         [
           `Tournament Registration - ${registration.registration_type}`,
           '1',
-          `$${registration.tournament_id?.entry_fee_individual || 0}`,
-          `$${registration.tournament_id?.entry_fee_individual || 0}`,
+          `Rs ${registration.tournament_id?.entry_fee_individual || 0}`,
+          `Rs ${registration.tournament_id?.entry_fee_individual || 0}`,
         ],
       ],
     });
@@ -78,7 +78,7 @@ const Payments = () => {
     // Total
     const finalY = doc.lastAutoTable.finalY + 10;
     doc.setFontSize(12);
-    doc.text(`Total: $${registration.tournament_id?.entry_fee_individual || 0}`, 150, finalY, { align: 'right' });
+    doc.text(`Total: Rs ${registration.tournament_id?.entry_fee_individual || 0}`, 150, finalY, { align: 'right' });
 
     // Payment status
     doc.setFontSize(10);
@@ -157,7 +157,7 @@ const Payments = () => {
                   <div>
                     <p className="text-sm text-gray-600">Entry Fee</p>
                     <p className="text-lg font-bold text-gray-800">
-                      ${registration.tournament_id?.entry_fee_individual || 0}
+                      Rs {registration.tournament_id?.entry_fee_individual || 0}
                     </p>
                   </div>
                   <div>
@@ -220,7 +220,6 @@ const Payments = () => {
             }}
             registration={selectedRegistration}
             tournament={selectedRegistration.tournament_id}
-            enableCardOption={false}
             onSuccess={() => {
               setShowPaymentModal(false);
               setSelectedRegistration(null);

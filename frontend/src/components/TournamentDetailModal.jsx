@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { FiX, FiCalendar, FiMapPin, FiDollarSign, FiUsers, FiClock, FiUser, FiCheck, FiUserPlus, FiPlus, FiTarget, FiAward, FiCreditCard, FiAlertCircle } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PayHerePaymentModal from './PayHerePaymentModal';
-import { processPayHerePayment } from '../utils/payhere';
+// PayHere frontend helpers removed; payment flow handled via server response or inline helpers where needed
 
 const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment }) => {
   const { user } = useAuth();
@@ -588,7 +588,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                             <p><span className="font-medium">Age:</span> {category.age_category}</p>
                           )}
                           <p><span className="font-medium">Type:</span> {category.participation_type}</p>
-                          <p><span className="font-medium">Entry Fee:</span> ${category.individual_player_fee?.toFixed(2) || '0.00'}</p>
+                          <p><span className="font-medium">Entry Fee:</span> Rs {category.individual_player_fee?.toFixed(2) || '0.00'}</p>
                         </div>
                         {isRegistered ? (
                           <div className="pt-3 border-t border-gray-200">
@@ -713,10 +713,10 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                         )}
                         <p><span className="font-medium">Type:</span> {category.participation_type}</p>
                         {category.participation_type === 'Individual' && (
-                          <p><span className="font-medium">Fee:</span> ${category.individual_player_fee?.toFixed(2) || '0.00'}</p>
+                          <p><span className="font-medium">Fee:</span> Rs {category.individual_player_fee?.toFixed(2) || '0.00'}</p>
                         )}
                         {category.participation_type === 'Team' && (
-                          <p><span className="font-medium">Team Fee ({category.team_size || 3} members):</span> ${category.team_event_fee?.toFixed(2) || '0.00'}</p>
+                          <p><span className="font-medium">Team Fee ({category.team_size || 3} members):</span> Rs {category.team_event_fee?.toFixed(2) || '0.00'}</p>
                         )}
                         {category.is_open_event && (
                           <p><span className="font-medium text-yellow-600">Open Event</span> (No restrictions)</p>
@@ -928,7 +928,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                   {selectedCategoryForPlayer.belt_category && (
                     <p><span className="font-medium">Belt Category:</span> {selectedCategoryForPlayer.belt_category}</p>
                   )}
-                  <p><span className="font-medium">Entry Fee:</span> ${selectedCategoryForPlayer.individual_player_fee?.toFixed(2) || '0.00'}</p>
+                  <p><span className="font-medium">Entry Fee:</span> Rs {selectedCategoryForPlayer.individual_player_fee?.toFixed(2) || '0.00'}</p>
                 </div>
 
                 <button
@@ -941,6 +941,14 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                         registration_type: 'Individual'
                         // player_id will be auto-detected by backend from user
                       };
+
+                      console.log('📤 Sending registration data:', {
+                        tournament_id: registrationData.tournament_id,
+                        category_id: registrationData.category_id,
+                        category_id_type: typeof registrationData.category_id,
+                        registration_type: registrationData.registration_type,
+                        selectedCategory: selectedCategoryForPlayer
+                      });
 
                       const response = await registrationService.registerForTournament(registrationData);
                       const newRegistration = response.data || response;
@@ -962,8 +970,57 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                       }
                     } catch (error) {
                       console.error('Error registering for event:', error);
-                      const errorMessage = error.response?.data?.message || error.message || 'Failed to register for event';
-                      toast.error(errorMessage);
+                      console.error('Error response:', error.response);
+                      console.error('Error response data:', error.response?.data);
+                      console.error('Error response errors:', error.response?.data?.errors);
+                      
+                      // Log each error in the array for debugging
+                      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+                        console.log('=== VALIDATION ERRORS DETAIL ===');
+                        error.response.data.errors.forEach((err, index) => {
+                          console.error(`Error ${index + 1}:`, {
+                            param: err.param,
+                            field: err.field,
+                            msg: err.msg,
+                            message: err.message,
+                            value: err.value,
+                            location: err.location,
+                            fullError: JSON.stringify(err, null, 2)
+                          });
+                        });
+                        console.log('=== END VALIDATION ERRORS ===');
+                      }
+                      
+                      // Extract detailed error message
+                      let errorMessage = 'Failed to register for event';
+                      
+                      if (error.response?.data) {
+                        const errorData = error.response.data;
+                        // Check for validation errors array (express-validator format)
+                        if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+                          const errorMessages = errorData.errors.map(err => {
+                            // express-validator uses 'param' and 'msg', but we also support 'field' and 'message'
+                            const field = err.param || err.field || 'Field';
+                            const msg = err.msg || err.message || 'Validation error';
+                            // Format: "Field name: Error message"
+                            return `${field}: ${msg}`;
+                          }).join('; ');
+                          
+                          // Combine main message with validation errors
+                          errorMessage = errorData.message 
+                            ? `${errorData.message}. ${errorMessages}` 
+                            : errorMessages;
+                        } else if (errorData.message) {
+                          errorMessage = errorData.message;
+                        }
+                      } else if (error.message) {
+                        errorMessage = error.message;
+                      }
+                      
+                      console.error('Final error message to display:', errorMessage);
+                      toast.error(errorMessage, {
+                        autoClose: 5000, // Show for 5 seconds to read the full message
+                      });
                     } finally {
                       setRegistering(false);
                     }
@@ -971,7 +1028,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                   disabled={registering}
                   className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
                 >
-                  {registering ? 'Registering...' : `Register & Pay $${selectedCategoryForPlayer.individual_player_fee?.toFixed(2) || '0.00'}`}
+                  {registering ? 'Registering...' : `Register & Pay Rs ${selectedCategoryForPlayer.individual_player_fee?.toFixed(2) || '0.00'}`}
                 </button>
               </div>
             </div>
@@ -1216,7 +1273,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                         })}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">
-                        Entry Fee: ${selectedEventForRegistration.individual_player_fee?.toFixed(2) || '0.00'}
+                        Entry Fee: Rs {selectedEventForRegistration.individual_player_fee?.toFixed(2) || '0.00'}
                       </p>
                     </div>
                   ) : (
@@ -1236,7 +1293,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                         ))}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">
-                        Team Fee ({selectedEventForRegistration.team_size || 3} members): ${selectedEventForRegistration.team_event_fee?.toFixed(2) || '0.00'}
+                        Team Fee ({selectedEventForRegistration.team_size || 3} members): Rs {selectedEventForRegistration.team_event_fee?.toFixed(2) || '0.00'}
                       </p>
                     </div>
                   )}

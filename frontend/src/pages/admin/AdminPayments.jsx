@@ -176,7 +176,7 @@ const AdminPayments = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">${totalRevenue.toFixed(2)}</p>
+                  <p className="text-3xl font-bold text-gray-800 mt-2">Rs {totalRevenue.toFixed(2)}</p>
                 </div>
                 <FiDollarSign className="w-8 h-8 text-green-600" />
               </div>
@@ -222,9 +222,9 @@ const AdminPayments = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                  <Tooltip formatter={(value) => `Rs ${value.toFixed(2)}`} />
                   <Legend />
-                  <Bar dataKey="revenue" fill="#8884d8" name="Revenue ($)" />
+                  <Bar dataKey="revenue" fill="#8884d8" name="Revenue (Rs)" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -261,9 +261,9 @@ const AdminPayments = () => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                <Tooltip formatter={(value) => `Rs ${value.toFixed(2)}`} />
                 <Legend />
-                <Line type="monotone" dataKey="revenue" stroke="#00C49F" strokeWidth={2} name="Revenue ($)" />
+                <Line type="monotone" dataKey="revenue" stroke="#00C49F" strokeWidth={2} name="Revenue (Rs)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -335,7 +335,7 @@ const AdminPayments = () => {
                             {registration.registration_type}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-bold text-gray-800">${amount.toFixed(2)}</td>
+                        <td className="px-6 py-4 font-bold text-gray-800">Rs {amount.toFixed(2)}</td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                             registration.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'

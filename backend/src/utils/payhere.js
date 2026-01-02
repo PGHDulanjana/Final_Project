@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const md5 = require("crypto-js/md5");
 
 /**
  * The PayHere Merchant ID, retrieved from environment variables.
@@ -18,6 +18,7 @@ if (!merchantId || !merchantSecret) {
   console.error(
     "PayHere merchant ID or secret is not defined in environment variables."
   );
+  console.log("ids",merchantId, merchantSecret);
 }
 
 /**
@@ -30,46 +31,18 @@ if (!merchantId || !merchantSecret) {
  * @returns {string} The uppercase MD5 hash string.
  */
 const generateHash = (orderId, amount) => {
-  // Validate merchant credentials
-  if (!merchantId || !merchantSecret) {
-    throw new Error('PayHere merchant ID or secret is not configured');
-  }
-  
-  // Hash the merchant secret first, as per PayHere documentation.
-  const hashedSecret = crypto
-    .createHash('md5')
-    .update(merchantSecret)
-    .digest('hex')
+  let hashedSecret = md5(merchantSecret).toString().toUpperCase();
+  let amountFormated = parseFloat(amount)
+    .toLocaleString("en-us", { minimumFractionDigits: 2 })
+    .replaceAll(",", "");
+  let currency = "LKR";
+  let hash = md5(
+    merchantId + orderId + amountFormated + currency + hashedSecret
+  )
+    .toString()
     .toUpperCase();
-  
-  // Format the amount to two decimal places without commas.
-  // PayHere requires the amount to be formatted as "1000.00" (no commas, exactly 2 decimal places)
-  const amountFormatted = parseFloat(amount)
-    .toFixed(2);
-  
-  const currency = "LKR";
-  
-  // Concatenate the required fields in the correct order: merchant_id + order_id + amount + currency + hashed_secret
-  const hashString = `${merchantId}${orderId}${amountFormatted}${currency.toUpperCase()}${hashedSecret}`;
-  
-  console.log('PayHere Hash Generation:', {
-    merchantId,
-    orderId,
-    amount: amountFormatted,
-    currency: currency.toUpperCase(),
-    hashString: hashString.substring(0, 50) + '...' // Log partial hash string for debugging
-  });
-  
-  // Return the final MD5 hash of the concatenated string.
-  const finalHash = crypto
-    .createHash('md5')
-    .update(hashString)
-    .digest('hex')
-    .toUpperCase();
-  
-  console.log('PayHere Generated Hash:', finalHash);
-  
-  return finalHash;
+
+  return hash;
 };
 
 /**
@@ -95,24 +68,16 @@ const verifyNotificationHash = (params) => {
     statusCode,
     md5sig,
   } = params;
-  
+
   // Hash the merchant secret.
-  const hashedSecret = crypto
-    .createHash('md5')
-    .update(merchantSecret)
-    .digest('hex')
-    .toUpperCase();
-  
+  const hashedSecret = md5(merchantSecret).toString().toUpperCase();
+
   // Concatenate the notification fields in the exact order specified by PayHere documentation.
   const stringToHash = `${receivedMerchantId}${orderId}${payhereAmount}${payhereCurrency}${statusCode}${hashedSecret}`;
-  
+
   // Calculate the MD5 hash of the concatenated string.
-  const calculatedHash = crypto
-    .createHash('md5')
-    .update(stringToHash)
-    .digest('hex')
-    .toUpperCase();
-  
+  const calculatedHash = md5(stringToHash).toString().toUpperCase();
+
   // Compare the calculated hash with the signature received from PayHere.
   return md5sig === calculatedHash;
 };
@@ -162,9 +127,42 @@ const createPaymentRequest = (paymentData) => {
     notifyUrl,
   } = paymentData;
 
+  // Validate required fields
+  if (!orderId) {
+    throw new Error("Order ID is required");
+  }
+  if (!amount || amount <= 0) {
+    throw new Error("Amount must be greater than 0");
+  }
+  if (!returnUrl || !cancelUrl || !notifyUrl) {
+    throw new Error("Return URL, Cancel URL, and Notify URL are required");
+  }
+
+  // Validate URLs are absolute URLs
+  try {
+    new URL(returnUrl);
+    new URL(cancelUrl);
+    new URL(notifyUrl);
+  } catch (urlError) {
+    throw new Error(
+      "Return URL, Cancel URL, and Notify URL must be valid absolute URLs"
+    );
+  }
+
   // Format the amount and generate the security hash.
   const formattedAmount = formatAmount(amount);
   const hash = generateHash(orderId, formattedAmount);
+  // Validate customer info
+  if (
+    !customerInfo ||
+    !customerInfo.firstName ||
+    !customerInfo.lastName ||
+    !customerInfo.email
+  ) {
+    throw new Error(
+      "Customer information (first name, last name, email) is required"
+    );
+  }
 
   // Assemble the final request object with all required fields.
   // The keys must match the names expected by the PayHere API.
@@ -173,18 +171,18 @@ const createPaymentRequest = (paymentData) => {
     return_url: returnUrl,
     cancel_url: cancelUrl,
     notify_url: notifyUrl,
-    order_id: orderId,
-    items: description,
+    order_id: String(orderId),
+    items: description, // Max 100 chars
     amount: formattedAmount,
-    currency: currency.toUpperCase(),
+    currency: (currency || "LKR").toUpperCase(),
     hash: hash,
-    first_name: customerInfo.firstName,
-    last_name: customerInfo.lastName,
-    email: customerInfo.email,
-    phone: customerInfo.phone,
-    address: customerInfo.address,
-    city: customerInfo.city,
-    country: customerInfo.country || "Sri Lanka",
+    first_name: customerInfo.firstName, // Max 50 chars
+    last_name: customerInfo.lastName, // Max 50 chars
+    email: customerInfo.email, // Max 100 chars
+    phone: customerInfo.phone, // Max 20 chars
+    address: customerInfo.address, // Max 100 chars
+    city: customerInfo.city, // Max 50 chars
+    country: customerInfo.country || "Sri Lanka", // Max 50 chars
   };
 
   return requestObject;
@@ -209,6 +207,6 @@ module.exports = {
   verifyNotificationHash,
   createPaymentRequest,
   singelLineAddress,
-  generateHash
+  generateHash,
+  formatAmount,
 };
-

@@ -554,7 +554,7 @@ const OrganizerDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">${totalRevenue.toFixed(2)}</p>
+                  <p className="text-3xl font-bold text-gray-800 mt-2">Rs {totalRevenue.toFixed(2)}</p>
                   <p className="text-xs text-gray-500 mt-1">From Paid Registrations</p>
                 </div>
                 <div className="p-3 bg-yellow-100 rounded-lg">

@@ -9,6 +9,9 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancel from './pages/PaymentCancel';
+import PaymentFailed from './pages/PaymentFailed';
+import PaymentPending from './pages/PaymentPending';
+import PaymentError from './pages/PaymentError';
 import Dashboard from './pages/Dashboard';
 import Tournaments from './pages/Tournaments';
 import Unauthorized from './pages/Unauthorized';
@@ -47,7 +50,7 @@ import AdminPayments from './pages/admin/AdminPayments';
 import Settings from './pages/admin/Settings';
 import NotificationManagement from './pages/admin/NotificationManagement';
 import { useEffect } from 'react';
-import { initSocket, disconnectSocket, reconnectSocket } from './utils/socket';
+import { initSocket, disconnectSocket } from './utils/socket';
 
 const AppRoutes = () => {
   const { token, isAuthenticated } = useAuth();
@@ -97,6 +100,9 @@ const AppRoutes = () => {
       <Route path="/reset-password" element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/dashboard" />} />
       <Route path="/payment/success" element={<PaymentSuccess />} />
       <Route path="/payment/cancel" element={<PaymentCancel />} />
+      <Route path="/payment/failed" element={<PaymentFailed />} />
+      <Route path="/payment/pending" element={<PaymentPending />} />
+      <Route path="/payment/error" element={<PaymentError />} />
       
       {/* Protected Routes */}
       <Route

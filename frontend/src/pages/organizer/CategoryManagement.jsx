@@ -1070,7 +1070,7 @@ const CategoryManagement = () => {
                 {formData.participation_type === 'Individual' ? (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Individual Player Fee ($) <span className="text-red-500">*</span>
+                      Individual Player Fee (Rs) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -1087,7 +1087,7 @@ const CategoryManagement = () => {
                 ) : (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Team Event Fee ($) <span className="text-red-500">*</span>
+                      Team Event Fee (Rs) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -1370,12 +1370,12 @@ const EventCard = ({ category, eventMatches, onEdit, onDelete }) => {
             {category.participation_type === 'Individual' ? (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Individual Fee:</span>
-                <span className="text-xl font-bold text-green-600">${category.individual_player_fee?.toFixed(2) || '0.00'}</span>
+                <span className="text-xl font-bold text-green-600">Rs {category.individual_player_fee?.toFixed(2) || '0.00'}</span>
               </div>
             ) : (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Team Fee:</span>
-                <span className="text-xl font-bold text-green-600">${category.team_event_fee?.toFixed(2) || '0.00'}</span>
+                <span className="text-xl font-bold text-green-600">Rs {category.team_event_fee?.toFixed(2) || '0.00'}</span>
               </div>
             )}
           </div>

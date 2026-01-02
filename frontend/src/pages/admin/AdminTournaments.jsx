@@ -324,7 +324,7 @@ const AdminTournaments = () => {
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                       <div className="flex items-center text-gray-600">
                         <FiDollarSign className="w-5 h-5 mr-2" />
-                        <span>Individual: ${tournament.entry_fee_individual} / Team: ${tournament.entry_fee_team}</span>
+                        <span>Individual: Rs {tournament.entry_fee_individual} / Team: Rs {tournament.entry_fee_team}</span>
                       </div>
                     </div>
                   </div>

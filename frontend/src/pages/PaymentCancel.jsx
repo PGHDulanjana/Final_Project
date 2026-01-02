@@ -13,21 +13,26 @@ const PaymentCancel = () => {
   
   // Handle both payment_id and order_id (PayHere uses order_id)
   const paymentId = searchParams.get('payment_id') || searchParams.get('order_id');
-  const orderId = searchParams.get('order_id');
   const statusCode = searchParams.get('status_code');
 
   useEffect(() => {
-    if (paymentId || orderId) {
+    if (paymentId) {
       loadPaymentDetails();
     }
-  }, [paymentId, orderId]);
+  }, [paymentId]);
 
   const loadPaymentDetails = async () => {
     setLoading(true);
     try {
-      const idToUse = paymentId || orderId;
-      const response = await paymentService.getPayment(idToUse);
-      setPayment(response.data);
+      const response = await paymentService.getPayment(paymentId);
+      
+      // Response structure: { success: true, data: {...} }
+      if (response?.success && response?.data) {
+        setPayment(response.data);
+      } else if (response?.data) {
+        // Fallback for old response structure
+        setPayment(response.data);
+      }
     } catch (error) {
       console.error('Error loading payment:', error);
       // Don't show error toast for cancelled payments
@@ -48,10 +53,10 @@ const PaymentCancel = () => {
             <p className="text-gray-600">Your payment was cancelled. No charges were made.</p>
           </div>
 
-          {(paymentId || orderId) && (
+          {paymentId && (
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-600 mb-2">
-                {paymentId ? 'Payment ID' : 'Order ID'}: <span className="font-semibold">{paymentId || orderId}</span>
+                Payment ID: <span className="font-semibold">{paymentId}</span>
               </p>
               {payment && (
                 <div className="mt-3 pt-3 border-t border-gray-200 text-left space-y-2">

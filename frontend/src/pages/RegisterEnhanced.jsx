@@ -116,12 +116,27 @@ const RegisterEnhanced = () => {
     if (date) {
       const birthDate = new Date(date);
       const today = new Date();
-      const age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
       
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      // Check if date is invalid
+      if (isNaN(birthDate.getTime())) {
         return 'Invalid date of birth';
       }
+      
+      // Check if birth date is in the future
+      if (birthDate > today) {
+        return 'Date of birth cannot be in the future';
+      }
+      
+      // Calculate age correctly
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      
+      // Adjust age if birthday hasn't occurred this year yet
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      
+      // Validate age range
       if (age < 5) return 'You must be at least 5 years old';
       if (age > 100) return 'Please enter a valid date of birth';
     }

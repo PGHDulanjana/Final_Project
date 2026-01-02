@@ -1,12 +1,10 @@
-const Payment = require('../models/Payment');
-const Registration = require('../models/Registration');
-const Tournament = require('../models/Tournament');
-const { sendPaymentConfirmation } = require('../utils/emailService');
-const { generatePayHereHash, verifyPayHereCallback } = require('../services/paymentService');
+const paymentService = require("../services/paymentService");
 
-// @desc    Get all payments
-// @route   GET /api/payments
-// @access  Private
+/**
+ * @desc    Get all payments
+ * @route   GET /api/payments
+ * @access  Private
+ */
 const getPayments = async (req, res, next) => {
   try {
     const { tournament_id, registration_id, payment_status } = req.query;
@@ -16,471 +14,468 @@ const getPayments = async (req, res, next) => {
     if (registration_id) query.registration_id = registration_id;
     if (payment_status) query.payment_status = payment_status;
 
-    const payments = await Payment.find(query)
-      .populate('registration_id')
-      .populate('tournament_id', 'tournament_name')
-      .sort({ created_at: -1 });
+    const result = await paymentService.getAllPayments(query);
 
-    res.status(200).json({
-      success: true,
-      count: payments.length,
-      data: payments
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Get single payment
-// @route   GET /api/payments/:id
-// @access  Private
-const getPayment = async (req, res, next) => {
-  try {
-    const payment = await Payment.findById(req.params.id)
-      .populate('registration_id')
-      .populate('tournament_id');
-
-    if (!payment) {
+    if (!result.success) {
       return res.status(404).json({
         success: false,
-        message: 'Payment not found'
+        message: result.error || "No payments found",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: payment
+      count: result.payments.length,
+      data: result.payments,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Create payment (PayHere integration)
-// @route   POST /api/payments
-// @access  Private
+/**
+ * @desc    Get single payment
+ * @route   GET /api/payments/:id
+ * @access  Private
+ */
+const getPayment = async (req, res, next) => {
+  try {
+    const result = await paymentService.getPaymentById(req.params.id);
+
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.error || "Payment not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: result.payment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Create payment (PayHere integration)
+ * @route   POST /api/payments
+ * @access  Private
+ */
 const createPayment = async (req, res, next) => {
   try {
-    const { registration_id, tournament_id, category_id, player_id, coach_id, amount, transaction_method } = req.body;
+    const result = await paymentService.createPayment(req.body);
 
-    let registration = null;
-    let tournament = null;
-    let category = null;
-    let eventFee = 0;
-
-    // If registration_id is provided, use existing registration flow
-    if (registration_id) {
-      registration = await Registration.findById(registration_id)
-        .populate('tournament_id')
-        .populate('player_id');
-
-      if (!registration) {
-        return res.status(404).json({
-          success: false,
-          message: 'Registration not found'
-        });
-      }
-
-      tournament = registration.tournament_id;
-      
-      // Get category to get entry fee
-      const TournamentCategory = require('../models/TournamentCategory');
-      category = await TournamentCategory.findById(registration.category_id);
-
-      if (!category) {
-        return res.status(404).json({
-          success: false,
-          message: 'Category not found for this registration'
-        });
-      }
-
-      // Determine fee based on participation type
-      if (registration.registration_type === 'Individual') {
-        eventFee = category.individual_player_fee || 0;
-      } else if (registration.registration_type === 'Team') {
-        eventFee = category.team_event_fee || 0;
-      }
-    } else {
-      // New flow: Payment first, then registration
-      if (!tournament_id || !category_id || !player_id) {
-        return res.status(400).json({
-          success: false,
-          message: 'tournament_id, category_id, and player_id are required when registration_id is not provided'
-        });
-      }
-
-      tournament = await Tournament.findById(tournament_id);
-      if (!tournament) {
-        return res.status(404).json({
-          success: false,
-          message: 'Tournament not found'
-        });
-      }
-
-      const TournamentCategory = require('../models/TournamentCategory');
-      category = await TournamentCategory.findById(category_id);
-      if (!category) {
-        return res.status(404).json({
-          success: false,
-          message: 'Event (category) not found'
-        });
-      }
-
-      // Verify category belongs to tournament
-      const catTournamentId = category.tournament_id?._id || category.tournament_id;
-      if (catTournamentId.toString() !== tournament_id.toString()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Event does not belong to the selected tournament'
-        });
-      }
-
-      // Verify authorization: If coach is making payment, verify they can pay for this player
-      if (req.user.user_type === 'Coach') {
-        const Player = require('../models/Player');
-        const Coach = require('../models/Coach');
-        const User = require('../models/User');
-        
-        const player = await Player.findById(player_id).populate('coach_id');
-        if (!player) {
-          return res.status(404).json({
-            success: false,
-            message: 'Player not found'
-          });
-        }
-
-        const coachProfile = await Coach.findOne({ user_id: req.user._id });
-        if (!coachProfile) {
-          return res.status(403).json({
-            success: false,
-            message: 'Coach profile not found'
-          });
-        }
-
-        // Verify coach has permission to pay for this player
-        const playerCoachId = player.coach_id?._id || player.coach_id;
-        let isAuthorized = playerCoachId && playerCoachId.toString() === coachProfile._id.toString();
-        
-        // Also check by coach_name if coach_id doesn't match
-        if (!isAuthorized && player.coach_name) {
-          const coachUser = await User.findById(req.user._id);
-          if (coachUser) {
-            const coachFullName = `${coachUser.first_name || ''} ${coachUser.last_name || ''}`.trim().toLowerCase();
-            const playerCoachName = (player.coach_name || '').toLowerCase();
-            isAuthorized = playerCoachName.includes(coachFullName) || 
-                          coachFullName.includes(playerCoachName) ||
-                          playerCoachName.includes(coachUser.first_name?.toLowerCase() || '') ||
-                          playerCoachName.includes(coachUser.last_name?.toLowerCase() || '');
-          }
-        }
-
-        if (!isAuthorized) {
-          return res.status(403).json({
-            success: false,
-            message: 'You are not authorized to make payments for this player. Player must be under your coaching.'
-          });
-        }
-      } else if (req.user.user_type === 'Player') {
-        // If player is making payment, verify it's for their own player profile
-        const Player = require('../models/Player');
-        const player = await Player.findById(player_id);
-        if (!player) {
-          return res.status(404).json({
-            success: false,
-            message: 'Player not found'
-          });
-        }
-        
-        if (player.user_id.toString() !== req.user._id.toString()) {
-          return res.status(403).json({
-            success: false,
-            message: 'You can only make payments for your own registrations'
-          });
-        }
-      }
-
-      // Get fee based on participation type
-      if (category.participation_type === 'Individual') {
-        eventFee = category.individual_player_fee || 0;
-      } else {
-        eventFee = category.team_event_fee || 0;
-      }
-    }
-
-    // Generate unique transaction ID
-    const transaction_id = `TXN${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-
-    const payment = await Payment.create({
-      registration_id: registration?._id || null,
-      tournament_id: tournament._id,
-      category_id: category._id,
-      player_id: player_id || registration?.player_id?._id || null,
-      coach_id: coach_id || null,
-      amount: amount || eventFee,
-      transaction_method: transaction_method || 'PayHere',
-      transaction_id,
-      payment_gateway: 'PayHere'
-    });
-
-    // PayHere payment hash generation (using shared service helper)
-    const merchant_id = process.env.PAYHERE_MERCHANT_ID;
-    if (!merchant_id) {
-      console.error('PayHere merchant ID is not configured in environment variables');
-      return res.status(500).json({
+    if (!result.success) {
+      return res.status(400).json({
         success: false,
-        message: 'PayHere merchant ID is not configured. Please contact support.'
+        message: result.error || "Failed to create payment",
       });
     }
-    
-    const order_id = payment._id.toString();
-    // Format amount to 2 decimal places as string (PayHere requires this format: "1000.00")
-    const payhere_amount = parseFloat(payment.amount).toFixed(2);
-    const currency = 'LKR';
-    
-    console.log('Creating PayHere payment:', {
-      merchant_id,
-      order_id,
-      amount: payhere_amount,
-      currency,
-      payment_id: payment._id
-    });
-    
-    // Generate hash using the formatted amount string (must match what's sent to PayHere)
-    let hash;
-    try {
-      hash = generatePayHereHash(order_id, payhere_amount);
-    } catch (error) {
-      console.error('Error generating PayHere hash:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to generate payment hash. Please contact support.',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
-    }
-
-    // Get frontend base URL from environment or use default
-    const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const return_url = `${frontendBaseUrl}/payment/success?order_id=${order_id}&payment_id=${order_id}`;
-    const cancel_url = `${frontendBaseUrl}/payment/cancel?order_id=${order_id}&payment_id=${order_id}`;
-    const notify_url = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/payments/payhere-callback`;
 
     res.status(201).json({
       success: true,
-      message: 'Payment initiated',
+      message: "Payment initiated",
       data: {
-        payment,
-        payhere: {
-          merchant_id,
-          order_id,
-          amount: payhere_amount,
-          currency,
-          hash,
-          return_url,
-          cancel_url,
-          notify_url
-        }
-      }
+        payment: result.payment,
+        payhere: result.requestObject,
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    PayHere callback handler
-// @route   POST /api/payments/payhere-callback
-// @access  Public
+/**
+ * @desc    PayHere callback handler (webhook)
+ * @route   POST /api/payments/payhere-callback
+ * @access  Public
+ */
 const payhereCallback = async (req, res, next) => {
   try {
-    const {
-      merchant_id,
-      order_id,
-      payhere_amount,
-      payhere_currency,
-      status_code,
-      md5sig
-    } = req.body;
+    console.log("=== PayHere Webhook Received ===");
+    console.log("Request method:", req.method);
+    console.log("Request body:", req.body);
+    console.log("Request headers:", req.headers);
 
-    // Verify MD5 signature using shared helper
-    const isValid = verifyPayHereCallback({
-      merchant_id,
-      order_id,
-      payhere_amount,
-      payhere_currency,
-      status_code,
-      md5sig
-    });
+    // PayHere sends data as form-urlencoded, so we need to use req.body
+    const result = await paymentService.validatePayment(req.body);
 
-    if (!isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid signature'
-      });
+    // PayHere expects a simple response
+    if (result.success) {
+      console.log("✅ Payment validation successful, status updated");
+      return res.status(200).send("OK");
     }
 
-    // Update payment status
-    const payment = await Payment.findById(order_id);
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Payment not found'
-      });
-    }
-
-    if (status_code === '2') {
-      payment.payment_status = 'Completed';
-      payment.payment_date = new Date();
-      await payment.save();
-
-      let registration = null;
-
-      // If payment has registration_id, update existing registration
-      if (payment.registration_id) {
-        registration = await Registration.findById(payment.registration_id);
-        if (registration) {
-          registration.payment_status = 'Paid';
-          await registration.save();
-        }
-      } else {
-        // New flow: Create registration after successful payment
-        if (payment.category_id && payment.player_id) {
-          const TournamentCategory = require('../models/TournamentCategory');
-          const category = await TournamentCategory.findById(payment.category_id);
-          
-          if (category) {
-            registration = await Registration.create({
-              tournament_id: payment.tournament_id,
-              category_id: payment.category_id,
-              player_id: payment.player_id,
-              coach_id: payment.coach_id || null,
-              registration_type: category.participation_type,
-              payment_status: 'Paid',
-              approval_status: 'Pending'
-            });
-
-            // Update payment with registration_id
-            payment.registration_id = registration._id;
-            await payment.save();
-          }
-        }
-      }
-
-      // Send confirmation email
-      const tournament = await Tournament.findById(payment.tournament_id);
-      const Player = require('../models/Player');
-      const player = await Player.findById(payment.player_id).populate('user_id');
-
-      if (player && player.user_id && player.user_id.email) {
-        await sendPaymentConfirmation(
-          player.user_id.email,
-          payment.amount,
-          tournament.tournament_name
-        );
-      }
-    } else {
-      payment.payment_status = 'Failed';
-      await payment.save();
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Payment status updated'
-    });
+    // If validation failed, still return OK to PayHere (to avoid retries)
+    // but log the error
+    console.error("❌ Payment validation failed:", result.error);
+    return res.status(200).send("OK");
   } catch (error) {
-    next(error);
+    console.error("❌ Error in payhereCallback:", error);
+    console.error("Error stack:", error.stack);
+    // Still return OK to PayHere to avoid retries
+    return res.status(200).send("OK");
   }
 };
 
-// @desc    Update payment
-// @route   PUT /api/payments/:id
-// @access  Private/Admin
+/**
+ * @desc    Handle payment return from PayHere
+ * @route   GET /api/payments/return
+ * @access  Public
+ */
+// const handlePaymentReturn = async (req, res, next) => {
+//   try {
+//     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
+//     // Sanitize query params to handle arrays (take first/last or unique)
+//     const getQueryParam = (param) => {
+//       if (Array.isArray(param)) {
+//         return param[0];
+//       }
+//       return param;
+//     };
+
+//     const payment_id = getQueryParam(req.query.payment_id);
+//     const order_id = getQueryParam(req.query.order_id) || payment_id;
+//     const status_code = getQueryParam(req.query.status_code);
+
+//     console.log("=== PAYMENT RETURN HANDLER ===");
+//     console.log("Query params (raw):", req.query);
+//     console.log("Query params (sanitized):", {
+//       order_id,
+//       payment_id,
+//       status_code,
+//     });
+
+//     // If we have status_code, process standard webhook logic
+//     if (status_code && order_id) {
+//       console.log("Processing payment notification (standard)...");
+//       const webhookData = {
+//         merchant_id: getQueryParam(req.query.merchant_id),
+//         order_id: order_id,
+//         payment_id: getQueryParam(req.query.payment_id),
+//         payhere_amount: getQueryParam(req.query.payhere_amount),
+//         payhere_currency: getQueryParam(req.query.payhere_currency),
+//         status_code: status_code,
+//         md5sig: getQueryParam(req.query.md5sig),
+//         method: getQueryParam(req.query.method),
+//       };
+
+//       // Try validating normally
+//       const validationResult = await paymentService.validatePayment(
+//         webhookData
+//       );
+
+//       // If validation failed due to invalid hash, retry without md5 (fallback)
+//       if (
+//         !validationResult.success &&
+//         validationResult.error &&
+//         validationResult.error.toLowerCase().includes("invalid payment hash")
+//       ) {
+//         console.warn(
+//           "Hash verification failed on return; retrying validation without md5 (manual return fallback)."
+//         );
+//         const fallbackData = {
+//           ...webhookData,
+//         };
+//         const fallbackResult = await paymentService.validatePayment(
+//           fallbackData
+//         );
+//         console.log("Fallback validation result:", fallbackResult);
+//       }
+//     } else if (order_id && !status_code) {
+//       console.log(
+//         "Processing payment return without status_code (Dev/Fallback flow)..."
+//       );
+//       const paymentCheck = await paymentService.getPaymentById(order_id);
+
+//       if (paymentCheck.success && paymentCheck.payment) {
+//         if (paymentCheck.payment.payment_status === "Pending") {
+//           console.log(
+//             "Payment is PENDING, assuming success from Return URL visit. Forcing validation..."
+//           );
+//           const mockSuccessData = {
+//             merchant_id: process.env.PAYHERE_MERCHANT_ID || "",
+//             order_id: order_id,
+//             payment_id:
+//               payment_id ||
+//               paymentCheck.payment.transaction_id ||
+//               "manual_verify",
+//             payhere_amount: paymentCheck.payment.amount.toString(),
+//             payhere_currency: "LKR",
+//             status_code: "2", // Success
+//             md5sig: "", // No hash check for manual
+//             method: "visa",
+//           };
+//           await paymentService.validatePayment(mockSuccessData);
+//         }
+//       }
+//     }
+
+//     if (!order_id) {
+//       console.error("No order_id/payment_id found in return URL");
+//       res.redirect(`${frontendUrl}/payment/error`);
+//       return res;
+//     }
+
+//     // Get the payment to check its status
+//     const paymentResult = await paymentService.getPaymentById(order_id);
+
+//     if (!paymentResult.success || !paymentResult.payment) {
+//       console.log("Payment not found, redirecting to failed page");
+//       res.redirect(`${frontendUrl}/payment/failed?payment_id=${order_id}`);
+//       return res;
+//     }
+
+//     const payment = paymentResult.payment;
+//     console.log("Payment status:", payment.payment_status);
+
+//     // If payment still pending, attempt a safe forced validation (manual return) as a last resort
+//     if (payment.payment_status === "Pending") {
+//       try {
+//         console.log(
+//           "Payment still pending on return; attempting forced validation (manual_return_force)"
+//         );
+//         const forceResult = await paymentService.validatePayment({
+//           merchant_id: process.env.PAYHERE_MERCHANT_ID || "",
+//           order_id: order_id,
+//           payment_id: payment.transaction_id || "",
+//           payhere_amount: payment.amount.toString(),
+//           payhere_currency: "LKR",
+//           status_code: "2", // Force success
+//           md5sig: "", // Skip hash
+//           method: "manual_force",
+//         });
+//         console.log("Forced validation result:", forceResult);
+
+//         // Re-fetch payment status after forced validation
+//         const refreshed = await paymentService.getPaymentById(order_id);
+//         if (refreshed.success && refreshed.payment) {
+//           paymentResult = refreshed; // update local reference
+//           payment.payment_status = refreshed.payment.payment_status;
+//           payment.transaction_id =
+//             refreshed.payment.transaction_id || payment.transaction_id;
+//           console.log(
+//             "Payment status after forced validation:",
+//             payment.payment_status
+//           );
+//         }
+//       } catch (forceErr) {
+//         console.error("Error during forced validation attempt:", forceErr);
+//       }
+//     }
+
+//     // Redirect based on payment status
+//     if (payment.payment_status === "Completed" || status_code === "2") {
+//       console.log("Redirecting to success page");
+//       res.redirect(
+//         `${frontendUrl}/payment/success?payment_id=${order_id}&transaction_id=${
+//           payment.transaction_id || ""
+//         }`
+//       );
+//     } else if (payment.payment_status === "Failed" || status_code === "-2") {
+//       console.log("Redirecting to failed page");
+//       res.redirect(`${frontendUrl}/payment/failed?payment_id=${order_id}`);
+//     } else if (payment.payment_status === "Cancelled" || status_code === "-1") {
+//       console.log("Redirecting to cancel page");
+//       res.redirect(`${frontendUrl}/payment/cancel?payment_id=${order_id}`);
+//     } else {
+//       console.log("Payment status unclear, redirecting to pending page");
+//       res.redirect(`${frontendUrl}/payment/pending?payment_id=${order_id}`);
+//     }
+
+//     return res;
+//   } catch (err) {
+//     console.error("Error in handlePaymentReturn:", err);
+//     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+//     res.redirect(`${frontendUrl}/payment/error`);
+//     return res;
+//   }
+// };
+
+/**
+ * @desc    Handle payment cancellation from PayHere
+ * @route   GET /api/payments/cancel
+ * @access  Public
+ */
+// const handlePaymentCancel = async (req, res, next) => {
+//   try {
+//     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+//     const { payment_id, order_id } = req.query;
+//     const paymentId = order_id || payment_id;
+
+//     console.log("=== PAYMENT CANCEL HANDLER ===");
+//     console.log("Payment ID:", paymentId);
+
+//     // Update payment and registration status to cancelled
+//     if (paymentId) {
+//       try {
+//         console.log(
+//           "Attempting to update payment/registration status to CANCELLED..."
+//         );
+
+//         // Simulate webhook cancellation by calling validatePayment with status_code -1
+//         const result = await paymentService.validatePayment({
+//           merchant_id: process.env.PAYHERE_MERCHANT_ID || "",
+//           order_id: paymentId,
+//           payment_id: "",
+//           payhere_amount: "0",
+//           payhere_currency: "LKR",
+//           status_code: "-1", // -1 indicates cancelled
+//           md5sig: "", // Not validating hash for manual cancellation
+//           method: "manual_cancel",
+//         });
+
+//         console.log("Validation result:", result);
+
+//         if (result.success) {
+//           console.log(
+//             `✓ Payment and Registration for payment_id ${paymentId} updated to CANCELLED`
+//           );
+//         } else {
+//           console.error(`✗ Failed to update status: ${result.error}`);
+//         }
+//       } catch (error) {
+//         console.error("Error updating payment/registration status:", error);
+//         // Continue to redirect even if update fails
+//       }
+//     } else {
+//       console.log("No payment_id provided in query");
+//     }
+
+//     console.log("Redirecting to cancel page...");
+//     res.redirect(`${frontendUrl}/payment/cancel?payment_id=${paymentId || ""}`);
+//     return res;
+//   } catch (err) {
+//     console.error("Error in handlePaymentCancel:", err);
+//     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+//     res.redirect(`${frontendUrl}/payment/error`);
+//     return res;
+//   }
+// };
+
+/**
+ * @desc    Update payment
+ * @route   PUT /api/payments/:id
+ * @access  Private/Admin
+ */
 const updatePayment = async (req, res, next) => {
   try {
-    let payment = await Payment.findById(req.params.id);
+    const result = await paymentService.updatePayment(req.params.id, req.body);
 
-    if (!payment) {
+    if (!result.success) {
       return res.status(404).json({
         success: false,
-        message: 'Payment not found'
+        message: result.error || "Payment not found",
       });
     }
 
-    payment = await Payment.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    });
-
     res.status(200).json({
       success: true,
-      message: 'Payment updated successfully',
-      data: payment
+      message: "Payment updated successfully",
+      data: result.payment,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Complete fake payment (TEMPORARY - for testing)
-// @route   POST /api/payments/:id/complete-fake
-// @access  Private
-const completeFakePayment = async (req, res, next) => {
+/**
+ * @desc    Check payment status
+ * @route   GET /api/payments/:id/status
+ * @access  Private
+ */
+const checkPaymentStatus = async (req, res, next) => {
   try {
-    const payment = await Payment.findById(req.params.id);
+    const result = await paymentService.checkPaymentStatus(req.params.id);
 
-    if (!payment) {
+    if (!result.success) {
       return res.status(404).json({
         success: false,
-        message: 'Payment not found'
+        message: result.error || "Payment not found",
       });
-    }
-
-    // Mark payment as completed
-    payment.payment_status = 'Completed';
-    payment.payment_date = new Date();
-    payment.transaction_method = 'Card'; // Fake payment method
-    await payment.save();
-
-    // Update registration payment status
-    let registration = null;
-    if (payment.registration_id) {
-      registration = await Registration.findById(payment.registration_id);
-      if (registration) {
-        registration.payment_status = 'Paid';
-        await registration.save();
-      }
-    } else {
-      // If no registration exists, create one (new flow)
-      if (payment.category_id && payment.player_id) {
-        const TournamentCategory = require('../models/TournamentCategory');
-        const category = await TournamentCategory.findById(payment.category_id);
-        
-        if (category) {
-          registration = await Registration.create({
-            tournament_id: payment.tournament_id,
-            category_id: payment.category_id,
-            player_id: payment.player_id,
-            coach_id: payment.coach_id || null,
-            registration_type: category.participation_type,
-            payment_status: 'Paid',
-            approval_status: 'Pending'
-          });
-
-          // Update payment with registration_id
-          payment.registration_id = registration._id;
-          await payment.save();
-        }
-      }
     }
 
     res.status(200).json({
       success: true,
-      message: 'Payment completed successfully (FAKE - Testing Mode)',
-      data: {
-        payment,
-        registration
-      }
+      data: result.payment,
     });
   } catch (error) {
-    console.error('Error completing fake payment:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete payment
+ * @route   DELETE /api/payments/:id
+ * @access  Private/Admin
+ */
+const deletePayment = async (req, res, next) => {
+  try {
+    const result = await paymentService.deletePayment(req.params.id);
+
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.error || "Payment not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Payment deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Complete fake payment (TEMPORARY - for testing)
+ * @route   POST /api/payments/:id/complete-fake
+ * @access  Private
+ */
+const completeFakePayment = async (req, res, next) => {
+  try {
+    const payment = await paymentService.getPaymentById(req.params.id);
+
+    if (!payment.success || !payment.payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    // Mark payment as completed using validatePayment
+    const result = await paymentService.validatePayment({
+      merchant_id: process.env.PAYHERE_MERCHANT_ID || "",
+      order_id: req.params.id,
+      payment_id: `FAKE_${Date.now()}`,
+      payhere_amount: payment.payment.amount.toString(),
+      payhere_currency: "LKR",
+      status_code: "2", // Success
+      md5sig: "", // No hash check for fake payment
+      method: "card",
+    });
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.error || "Failed to complete payment",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Payment completed successfully (FAKE - Testing Mode)",
+      data: {
+        payment: result.payment,
+      },
+    });
+  } catch (error) {
+    console.error("Error completing fake payment:", error);
     next(error);
   }
 };
@@ -490,7 +485,10 @@ module.exports = {
   getPayment,
   createPayment,
   payhereCallback,
+  // handlePaymentReturn,
+  // handlePaymentCancel,
   updatePayment,
-  completeFakePayment
+  checkPaymentStatus,
+  deletePayment,
+  completeFakePayment,
 };
-

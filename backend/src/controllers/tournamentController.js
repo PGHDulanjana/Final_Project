@@ -151,6 +151,11 @@ const createTournament = async (req, res, next) => {
       registration_deadline: new Date(req.body.registration_deadline)
     };
 
+    // Remove events field if it exists (events should be in TournamentCategory collection, not embedded)
+    if (tournamentData.events !== undefined) {
+      delete tournamentData.events;
+    }
+
     // Remove undefined/null values for optional fields
     if (!tournamentData.description) delete tournamentData.description;
     if (!tournamentData.rules) delete tournamentData.rules;
@@ -236,7 +241,13 @@ const updateTournament = async (req, res, next) => {
       });
     }
 
-    tournament = await Tournament.findByIdAndUpdate(req.params.id, req.body, {
+    // Remove events field if it exists (events should be in TournamentCategory collection, not embedded)
+    const updateData = { ...req.body };
+    if (updateData.events !== undefined) {
+      delete updateData.events;
+    }
+
+    tournament = await Tournament.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true
     }).populate('organizer_id');

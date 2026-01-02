@@ -4,7 +4,78 @@ import { registrationService } from '../../services/registrationService';
 import { paymentService } from '../../services/paymentService';
 import { categoryService } from '../../services/categoryService';
 import { playerService } from '../../services/playerService';
-import { processPayHerePayment, extractCustomerInfo } from '../../utils/payhere';
+
+// PayHere helpers moved inline (frontend utils removed)
+const extractCustomerInfoLocal = (data) => {
+  const customerInfo = {};
+  if (data?.player_id?.user_id) {
+    const user = data.player_id.user_id;
+    customerInfo.first_name = user.first_name || "";
+    customerInfo.last_name = user.last_name || "";
+    customerInfo.email = user.email || "";
+    customerInfo.phone = user.phone || "";
+  } else if (data?.user_id) {
+    const user = data.user_id;
+    customerInfo.first_name = user.first_name || "";
+    customerInfo.last_name = user.last_name || "";
+    customerInfo.email = user.email || "";
+    customerInfo.phone = user.phone || "";
+  } else if (data?.first_name) {
+    customerInfo.first_name = data.first_name || "";
+    customerInfo.last_name = data.last_name || "";
+    customerInfo.email = data.email || "";
+    customerInfo.phone = data.phone || "";
+  }
+  if (!customerInfo.country) customerInfo.country = "Sri Lanka";
+  return customerInfo;
+};
+
+const submitPayHereFormLocal = (payhereData, options = {}) => {
+  if (!payhereData) return false;
+  const { merchant_id, order_id, amount, currency = "LKR", hash, return_url, cancel_url, notify_url } = payhereData;
+  const { items = "Tournament Registration", customerInfo = {}, returnUrl, cancelUrl } = options;
+  const frontendBaseUrl = window.location.origin;
+  const finalReturnUrl = return_url || returnUrl || `${frontendBaseUrl}/payment/success?payment_id=${order_id}`;
+  const finalCancelUrl = cancel_url || cancelUrl || `${frontendBaseUrl}/payment/cancel?payment_id=${order_id}`;
+  const finalNotifyUrl = notify_url || `${process.env.REACT_APP_API_URL || ''}/api/payments/payhere-callback`;
+  if (!merchant_id || !order_id || !amount || !hash) {
+    console.error("PayHere: Missing required fields", { merchant_id, order_id, amount, hash });
+    return false;
+  }
+  const formattedAmount = parseFloat(amount).toFixed(2);
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = (process.env.REACT_APP_PAYHERE_ENV === 'production' ? "https://www.payhere.lk/pay/checkout" : "https://sandbox.payhere.lk/pay/checkout");
+  const formData = {
+    merchant_id,
+    return_url: finalReturnUrl,
+    cancel_url: finalCancelUrl,
+    notify_url: finalNotifyUrl,
+    order_id,
+    items: items || "Tournament Registration",
+    amount: formattedAmount,
+    currency: currency || "LKR",
+    hash,
+  };
+  if (customerInfo.first_name) formData.first_name = customerInfo.first_name;
+  if (customerInfo.last_name) formData.last_name = customerInfo.last_name;
+  if (customerInfo.email) formData.email = customerInfo.email;
+  if (customerInfo.phone) formData.phone = customerInfo.phone;
+  if (customerInfo.address) formData.address = customerInfo.address;
+  if (customerInfo.city) formData.city = customerInfo.city;
+  if (customerInfo.country) formData.country = customerInfo.country;
+  Object.entries(formData).forEach(([key, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = String(value);
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
+  return true;
+};
+
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
@@ -256,13 +327,12 @@ const PlayerTournaments = () => {
       // Process PayHere payment
       if (response.data?.payhere) {
         // Extract customer info from registration
-        const customerInfo = extractCustomerInfo(selectedRegistration);
-        
-        // Process payment using utility
-        const success = processPayHerePayment(response, {
+        const customerInfo = extractCustomerInfoLocal(selectedRegistration);
+
+        // Submit form to PayHere using inline helper
+        const success = submitPayHereFormLocal(response.data.payhere, {
           items: `Tournament Entry Fee - ${tournament.tournament_name}`,
-          customerInfo,
-          method: 'form'
+          customerInfo
         });
 
         if (success) {
@@ -636,7 +706,6 @@ const PlayerTournaments = () => {
             const regTournamentId = selectedRegistration.tournament_id?._id || selectedRegistration.tournament_id;
             return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
           })}
-          enableCardOption={false}
           onSuccess={() => {
             setShowPaymentModal(false);
             setSelectedRegistration(null);

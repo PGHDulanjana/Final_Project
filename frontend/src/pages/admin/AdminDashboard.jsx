@@ -926,7 +926,7 @@ const AdminDashboard = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">${totalRevenue.toFixed(2)}</p>
+                      <p className="text-3xl font-bold text-gray-800 mt-2">Rs {totalRevenue.toFixed(2)}</p>
                       <p className="text-xs text-gray-500 mt-1">From {payments.filter(p => p.status === 'Completed').length} Payments</p>
                     </div>
                     <div className="p-3 bg-purple-100 rounded-lg">
@@ -1927,7 +1927,7 @@ const AdminDashboard = () => {
                           {payment.payment_id || payment._id}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          ${payment.amount?.toFixed(2) || '0.00'}
+                          Rs {payment.amount?.toFixed(2) || '0.00'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs rounded-full ${

@@ -81,7 +81,8 @@ const tournamentSchema = new mongoose.Schema({
     maxlength: 20
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  strict: true // Prevent extra fields like 'events' from being saved
 });
 
 module.exports = mongoose.model('Tournament', tournamentSchema);

@@ -220,7 +220,7 @@ const TeamTournaments = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div className="flex items-center text-gray-600">
                         <FiDollarSign className="w-5 h-5 mr-2 text-blue-500" />
-                        <span>Team Fee: ${tournament.entry_fee_team || 0}</span>
+                        <span>Team Fee: Rs {tournament.entry_fee_team || 0}</span>
                       </div>
                       <div className="flex items-center text-gray-600">
                         <FiClock className="w-5 h-5 mr-2 text-blue-500" />

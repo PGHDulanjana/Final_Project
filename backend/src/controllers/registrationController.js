@@ -357,10 +357,28 @@ const createRegistration = async (req, res, next) => {
     // Final validation for Individual registrations
     if (registration_type === 'Individual' && !playerId) {
       console.error('🔵 Registration: ERROR - playerId is still null/undefined for Individual registration');
+      console.error('🔵 Registration: Debug info:', {
+        user_type: req.user.user_type,
+        user_id: req.user._id,
+        player_id_from_body: req.body.player_id,
+        playerIdToUse: playerIdToUse
+      });
       return res.status(400).json({
         success: false,
-        message: 'Player ID is required for individual event registration.'
+        message: 'Player ID is required for individual event registration. Please ensure you have a player profile.'
       });
+    }
+    
+    // Ensure playerId is a valid ObjectId for Individual registrations
+    if (registration_type === 'Individual' && playerId) {
+      const mongoose = require('mongoose');
+      if (!mongoose.Types.ObjectId.isValid(playerId)) {
+        console.error('🔵 Registration: ERROR - playerId is not a valid ObjectId:', playerId);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid player ID format. Please contact support.'
+        });
+      }
     }
     
     // Verify player exists (if playerId is set)
@@ -477,8 +495,9 @@ const createRegistration = async (req, res, next) => {
           payment_status: 'Paid'
         });
 
-        // Create registration - explicitly exclude player_id, team_id, coach_id, category_id
-        // For sparse indexes to work correctly, we must use undefined (not null) for fields we don't want indexed
+        // Create registration - DO NOT include fields that are not needed
+        // Setting to undefined/null causes sparse index conflicts with other registrations
+        // Only include the fields that are actually needed for Judge registration
         const judgeRegistrationData = {
           tournament_id,
           judge_id: finalJudgeId,
@@ -486,12 +505,10 @@ const createRegistration = async (req, res, next) => {
           approval_status: 'Approved', // Auto-approve judge registrations
           payment_status: 'Paid' // No payment required for judges
         };
-        // Explicitly set fields to undefined to avoid null values in sparse indexes
-        // This ensures sparse indexes ignore these fields for Judge registrations
-        judgeRegistrationData.category_id = undefined; // Judges register for tournament, not specific events
-        judgeRegistrationData.player_id = undefined;
-        judgeRegistrationData.team_id = undefined;
-        judgeRegistrationData.coach_id = undefined;
+        // DO NOT include category_id, player_id, team_id, or coach_id at all
+        // Omitting them entirely prevents sparse index conflicts
+        // The schema has default: null for these fields, so they'll be null in the DB
+        // but won't conflict with sparse indexes if we don't explicitly set them
         
         registration = await Registration.create(judgeRegistrationData);
         
@@ -584,8 +601,20 @@ const createRegistration = async (req, res, next) => {
           });
         }
         
-        // Re-throw other errors to be handled by outer catch
-        throw createError;
+        // Log and return error instead of throwing
+        console.error('❌ Unexpected error creating judge registration:', {
+          name: createError.name,
+          message: createError.message,
+          stack: createError.stack,
+          code: createError.code
+        });
+        
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to create judge registration. Please try again or contact support.',
+          error: process.env.NODE_ENV === 'development' ? createError.message : undefined,
+          errorType: createError.name
+        });
       }
 
       res.status(201).json({
@@ -711,7 +740,10 @@ const createRegistration = async (req, res, next) => {
           payment_status: 'Paid'
         });
         
-        // Create registration - use undefined for fields not needed to avoid sparse index conflicts
+        // Create registration - DO NOT include fields that are not needed
+        // Setting to undefined/null causes sparse index conflicts with other registrations
+        // Only include the fields that are actually needed for Coach registration
+        // MongoDB sparse indexes treat null/undefined as values, so we must omit fields entirely
         const coachRegistrationData = {
           tournament_id: tournament_id,
           coach_id: finalCoachId, // Always use the coach profile found by user_id
@@ -719,11 +751,10 @@ const createRegistration = async (req, res, next) => {
           approval_status: 'Approved', // Auto-approve coach registrations
           payment_status: 'Paid' // No payment required for coaches
         };
-        // Explicitly set fields to undefined to avoid null values in sparse indexes
-        coachRegistrationData.category_id = undefined; // Coaches register for tournament, not specific events
-        coachRegistrationData.player_id = undefined;
-        coachRegistrationData.team_id = undefined;
-        coachRegistrationData.judge_id = undefined;
+        // DO NOT include category_id, player_id, team_id, or judge_id at all
+        // Omitting them entirely prevents sparse index conflicts
+        // The schema has default: null for these fields, so they'll be null in the DB
+        // but won't be included in sparse indexes if we don't set them
         
         registration = await Registration.create(coachRegistrationData);
         
@@ -802,7 +833,24 @@ const createRegistration = async (req, res, next) => {
             errors: validationErrors
           });
         }
-        throw createError;
+        
+        // Log the full error for debugging
+        console.error('❌ Unexpected error creating coach registration:', {
+          name: createError.name,
+          message: createError.message,
+          stack: createError.stack,
+          code: createError.code,
+          keyPattern: createError.keyPattern,
+          keyValue: createError.keyValue
+        });
+        
+        // Return a proper error response instead of throwing
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to create registration. Please try again or contact support.',
+          error: process.env.NODE_ENV === 'development' ? createError.message : undefined,
+          errorType: createError.name
+        });
       }
 
       res.status(201).json({
@@ -817,43 +865,67 @@ const createRegistration = async (req, res, next) => {
     // Allow re-registration if payment is Pending or Failed
     if (registration_type === 'Individual' && playerId) {
       console.log('🔵 Checking for duplicate Individual registration:', {
-        tournament_id,
-        category_id,
-        player_id: playerId,
+        tournament_id: tournament_id?.toString(),
+        category_id: category_id?.toString(),
+        player_id: playerId?.toString(),
         registration_type: 'Individual'
       });
+      
+      // Ensure playerId is converted to ObjectId for proper comparison
+      const mongoose = require('mongoose');
+      const playerIdObj = mongoose.Types.ObjectId.isValid(playerId) 
+        ? new mongoose.Types.ObjectId(playerId) 
+        : playerId;
       
       const existingRegistration = await Registration.findOne({
-        tournament_id,
-        category_id,
-        player_id: playerId,
+        tournament_id: tournament_id,
+        category_id: category_id,
+        player_id: playerIdObj,
         registration_type: 'Individual'
-      });
+      }).populate('player_id', 'user_id');
       
-      console.log('🔵 Existing registration found:', existingRegistration ? existingRegistration._id : 'None');
+      console.log('🔵 Existing registration found:', existingRegistration ? {
+        registration_id: existingRegistration._id.toString(),
+        player_id: existingRegistration.player_id?._id?.toString() || existingRegistration.player_id?.toString(),
+        payment_status: existingRegistration.payment_status
+      } : 'None');
 
       if (existingRegistration) {
-        // Only block if payment is already Paid
-        if (existingRegistration.payment_status === 'Paid') {
-          return res.status(400).json({
-            success: false,
-            message: 'Player is already registered and paid for this event',
-            errors: [{
-              field: 'player_id',
-              message: 'This player is already registered and paid for this tournament event'
-            }]
-          });
-        }
+        // Verify the player_id actually matches (double-check to prevent false positives)
+        const existingPlayerId = existingRegistration.player_id?._id?.toString() || 
+                                 existingRegistration.player_id?.toString();
+        const currentPlayerId = playerIdObj.toString();
         
-        // If payment is Pending or Failed, return the existing registration so coach can proceed with payment
-        // Don't create a new registration, just return the existing one
-        if (existingRegistration.payment_status === 'Pending' || existingRegistration.payment_status === 'Failed') {
-          return res.status(200).json({
-            success: true,
-            message: 'Registration exists with pending payment. Please complete payment.',
-            data: existingRegistration,
-            requiresPayment: true
+        if (existingPlayerId !== currentPlayerId) {
+          console.log('⚠️ Found registration but player_id mismatch - allowing new registration:', {
+            existing_player_id: existingPlayerId,
+            current_player_id: currentPlayerId
           });
+          // Player IDs don't match, so this is a different player - allow registration
+        } else {
+          // Same player - check payment status
+          // Only block if payment is already Paid
+          if (existingRegistration.payment_status === 'Paid') {
+            return res.status(400).json({
+              success: false,
+              message: 'You are already registered and paid for this event',
+              errors: [{
+                field: 'player_id',
+                message: 'You are already registered and paid for this tournament event'
+              }]
+            });
+          }
+          
+          // If payment is Pending or Failed, return the existing registration so player can proceed with payment
+          // Don't create a new registration, just return the existing one
+          if (existingRegistration.payment_status === 'Pending' || existingRegistration.payment_status === 'Failed') {
+            return res.status(200).json({
+              success: true,
+              message: 'Registration exists with pending payment. Please complete payment.',
+              data: existingRegistration,
+              requiresPayment: true
+            });
+          }
         }
       }
     }
@@ -950,6 +1022,13 @@ const createRegistration = async (req, res, next) => {
         }
       }
       
+      // DO NOT set fields that are not relevant to this registration type
+      // This prevents sparse index conflicts
+      // For Individual: don't set team_id, judge_id
+      // For Team: don't set player_id, judge_id
+      // For Coach: don't set player_id, team_id, judge_id, category_id
+      // For Judge: don't set player_id, team_id, coach_id, category_id
+      
       registration = await Registration.create(registrationData);
     } catch (createError) {
       console.error('Registration creation error:', createError);
@@ -968,32 +1047,88 @@ const createRegistration = async (req, res, next) => {
         // Check which index caused the conflict
         if (keyPattern.tournament_id && keyPattern.category_id && keyPattern.player_id) {
           // Individual registration duplicate
+          // Ensure we use the correct playerId (from playerIdToUse or playerId variable)
+          const playerIdToCheck = playerId || playerIdToUse || req.body.player_id;
+          
+          if (!playerIdToCheck) {
+            console.error('⚠️ Duplicate key error but playerId is missing');
+            return res.status(400).json({
+              success: false,
+              message: 'Registration failed. Please try again.',
+              errors: [{
+                field: 'player_id',
+                message: 'Player ID is required for registration'
+              }]
+            });
+          }
+          
+          // Convert to ObjectId for proper comparison
+          const mongoose = require('mongoose');
+          const playerIdObj = mongoose.Types.ObjectId.isValid(playerIdToCheck) 
+            ? new mongoose.Types.ObjectId(playerIdToCheck) 
+            : playerIdToCheck;
+          
           const existingRegistration = await Registration.findOne({
             tournament_id,
             category_id,
-            player_id: playerId,
+            player_id: playerIdObj,
             registration_type: 'Individual'
-          });
+          }).populate('player_id', 'user_id');
           
           if (existingRegistration) {
-            if (existingRegistration.payment_status === 'Paid') {
-              return res.status(400).json({
+            // Double-check that the player_id actually matches
+            const existingPlayerId = existingRegistration.player_id?._id?.toString() || 
+                                     existingRegistration.player_id?.toString();
+            const currentPlayerId = playerIdObj.toString();
+            
+            if (existingPlayerId === currentPlayerId) {
+              // Same player - check payment status
+              if (existingRegistration.payment_status === 'Paid') {
+                return res.status(400).json({
+                  success: false,
+                  message: 'You are already registered and paid for this event',
+                  errors: [{
+                    field: 'player_id',
+                    message: 'You are already registered and paid for this tournament event'
+                  }]
+                });
+              } else {
+                // Return existing registration for payment completion
+                return res.status(200).json({
+                  success: true,
+                  message: 'Registration exists with pending payment. Please complete payment.',
+                  data: existingRegistration,
+                  requiresPayment: true
+                });
+              }
+            } else {
+              // Different player - this shouldn't happen with the unique index, but handle gracefully
+              console.error('⚠️ Duplicate key error but player IDs don\'t match:', {
+                existing_player_id: existingPlayerId,
+                current_player_id: currentPlayerId,
+                tournament_id: tournament_id?.toString(),
+                category_id: category_id?.toString()
+              });
+              return res.status(500).json({
                 success: false,
-                message: 'You are already registered and paid for this event',
+                message: 'Registration conflict detected. Please contact support.',
                 errors: [{
-                  field: 'player_id',
-                  message: 'This player is already registered and paid for this tournament event'
+                  field: 'registration',
+                  message: 'A registration conflict occurred. Please try again or contact support.'
                 }]
               });
-            } else {
-              // Return existing registration for payment completion
-              return res.status(200).json({
-                success: true,
-                message: 'Registration exists with pending payment. Please complete payment.',
-                data: existingRegistration,
-                requiresPayment: true
-              });
             }
+          } else {
+            // Duplicate key error but registration not found - might be a race condition
+            console.warn('⚠️ Duplicate key error but registration not found (possible race condition)');
+            return res.status(400).json({
+              success: false,
+              message: 'Registration may already exist. Please refresh the page and try again.',
+              errors: [{
+                field: 'registration',
+                message: 'A registration with these details may already exist'
+              }]
+            });
           }
         } else if (keyPattern.tournament_id && keyPattern.coach_id) {
           // Coach registration duplicate
@@ -1064,8 +1199,22 @@ const createRegistration = async (req, res, next) => {
         });
       }
       
-      // Re-throw if not a duplicate error
-      throw createError;
+      // Log and return error instead of throwing
+      console.error('❌ Unexpected error creating registration:', {
+        name: createError.name,
+        message: createError.message,
+        stack: createError.stack,
+        code: createError.code,
+        keyPattern: createError.keyPattern,
+        keyValue: createError.keyValue
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create registration. Please try again or contact support.',
+        error: process.env.NODE_ENV === 'development' ? createError.message : undefined,
+        errorType: createError.name
+      });
     }
 
     // Send confirmation email (if function is available)
@@ -1087,7 +1236,14 @@ const createRegistration = async (req, res, next) => {
       data: registration
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('❌ Registration controller error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
+    
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors || {}).map(err => ({
         field: err.path,
@@ -1099,7 +1255,14 @@ const createRegistration = async (req, res, next) => {
         errors: validationErrors
       });
     }
-    next(error);
+    
+    // Return a proper error response instead of passing to error handler
+    return res.status(500).json({
+      success: false,
+      message: 'An unexpected error occurred during registration. Please try again or contact support.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      errorType: error.name
+    });
   }
 };
 

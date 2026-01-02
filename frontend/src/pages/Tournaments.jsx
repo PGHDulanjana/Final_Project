@@ -83,7 +83,7 @@ const Tournaments = () => {
                     <span className="font-medium">Venue:</span> {tournament.venue}
                   </p>
                   <p className="text-sm">
-                    <span className="font-medium">Entry Fee:</span> ${tournament.entry_fee_individual}
+                    <span className="font-medium">Entry Fee:</span> Rs {tournament.entry_fee_individual}
                   </p>
                 </div>
 

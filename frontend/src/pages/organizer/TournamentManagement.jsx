@@ -320,7 +320,7 @@ const TournamentManagement = () => {
                         {tournament.status}
                       </span>
                       <div className="text-xs text-gray-500">
-                        ${tournament.entry_fee_individual || 0} / ${tournament.entry_fee_team || 0}
+                        Rs {tournament.entry_fee_individual || 0} / Rs {tournament.entry_fee_team || 0}
                       </div>
                     </div>
                   </div>

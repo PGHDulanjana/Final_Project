@@ -303,9 +303,9 @@ const Analytics = () => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                <Tooltip formatter={(value) => `Rs ${value.toFixed(2)}`} />
                 <Legend />
-                <Line type="monotone" dataKey="revenue" stroke="#00C49F" strokeWidth={2} name="Revenue ($)" />
+                <Line type="monotone" dataKey="revenue" stroke="#00C49F" strokeWidth={2} name="Revenue (Rs)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
