@@ -21,6 +21,10 @@ const registrationRoutes = require("./routes/registrationRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
+const tatamiRoutes = require("./routes/tatamiRoutes");
+const kataPerformanceRoutes = require("./routes/kataPerformanceRoutes");
+const kataReportRoutes = require("./routes/kataReportRoutes");
+const kumiteReportRoutes = require("./routes/kumiteReportRoutes");
 
 // Import middleware
 const errorHandler = require("./middlewares/errorHandler");
@@ -135,6 +139,10 @@ app.use("/api/registrations", registrationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/tatamis", tatamiRoutes);
+app.use("/api/kata-performances", kataPerformanceRoutes);
+app.use("/api/kata-reports", kataReportRoutes);
+app.use("/api/kumite-reports", kumiteReportRoutes);
 
 // 404 handler
 app.use((req, res) => {

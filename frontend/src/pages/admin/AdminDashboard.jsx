@@ -185,7 +185,7 @@ const AdminDashboard = () => {
   const totalMatches = matches.length;
   const pendingDraws = matches.filter(m => m.status === 'Scheduled' && !m.participants?.length).length;
   const totalRevenue = payments
-    .filter(p => p.status === 'Completed')
+    .filter(p => p.payment_status === 'Completed')
     .reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalRegistrations = registrations.length;
   const completedMatches = matches.filter(m => m.status === 'Completed').length;
@@ -927,7 +927,7 @@ const AdminDashboard = () => {
                     <div>
                       <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
                       <p className="text-3xl font-bold text-gray-800 mt-2">Rs {totalRevenue.toFixed(2)}</p>
-                      <p className="text-xs text-gray-500 mt-1">From {payments.filter(p => p.status === 'Completed').length} Payments</p>
+                      <p className="text-xs text-gray-500 mt-1">From {payments.filter(p => p.payment_status === 'Completed').length} Payments</p>
                     </div>
                     <div className="p-3 bg-purple-100 rounded-lg">
                       <FiDollarSign className="w-8 h-8 text-purple-600" />
@@ -1931,11 +1931,11 @@ const AdminDashboard = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs rounded-full ${
-                            payment.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                            payment.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                            payment.payment_status === 'Completed' ? 'bg-green-100 text-green-800' :
+                            payment.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-red-100 text-red-800'
                           }`}>
-                            {payment.status}
+                            {payment.payment_status}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

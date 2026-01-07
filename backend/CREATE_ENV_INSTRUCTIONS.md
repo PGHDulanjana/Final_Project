@@ -26,6 +26,12 @@ NODE_ENV=development
 JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
 JWT_EXPIRE=7d
 FRONTEND_URL=http://localhost:3000
+
+# Google Gemini AI API Key (for intelligent match draw generation)
+# Get your API key from: https://aistudio.google.com/apikey
+# Or visit: https://makersuite.google.com/app/apikey
+# After getting the key, replace 'your_gemini_api_key_here' with your actual API key
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### Step 3: Save the File

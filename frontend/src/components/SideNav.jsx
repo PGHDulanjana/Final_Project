@@ -56,7 +56,7 @@ const SideNav = ({ role }) => {
     Player: [
       { icon: FiUser, label: 'My Profile', path: '/player/profile' },
       { icon: FiAward, label: 'Tournaments', path: '/player/tournaments' },
-      { icon: FiZap, label: 'My Matches', path: '/player/matches' },
+      { icon: FiTarget, label: 'Match Draws', path: '/player/matches' },
       { icon: FiCheckCircle, label: 'My Results', path: '/player/results' },
       {
         icon: FiTrendingUp,
@@ -68,15 +68,13 @@ const SideNav = ({ role }) => {
     Judge: [
       { icon: FiHome, label: 'Dashboard', path: '/judge/dashboard', exact: true },
       { icon: FiZap, label: 'Active Matches', path: '/judge/matches' },
-      { icon: FiActivity, label: 'Live Scoring', path: '/judge/scoring' },
       { icon: FiCheckCircle, label: 'Scored Matches', path: '/judge/scored' },
       { icon: FiCalendar, label: 'Schedule', path: '/judge/schedule' }
     ],
     Coach: [
       { icon: FiHome, label: 'Dashboard', path: '/coach/dashboard', exact: true },
-      { icon: FiUsers, label: 'My Teams', path: '/coach/teams' },
-      { icon: FiAward, label: 'Team Tournaments', path: '/coach/tournaments' },
-      { icon: FiBarChart2, label: 'Team Stats', path: '/coach/stats' },
+      { icon: FiTarget, label: 'Kumite Match Draws', path: '/coach/kumite-match-draws' },
+      { icon: FiTarget, label: 'Kata Player Lists', path: '/coach/kata-player-lists' },
       { icon: FiCalendar, label: 'Schedule', path: '/coach/schedule' },
       { icon: FiBell, label: 'Notifications', path: '/coach/notifications' }
     ],

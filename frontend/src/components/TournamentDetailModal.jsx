@@ -6,11 +6,15 @@ import { playerService } from '../services/playerService';
 import { teamService } from '../services/teamService';
 import { dojoService } from '../services/dojoService';
 import { matchService } from '../services/matchService';
+import kataReportService from '../services/kataReportService';
+import kumiteReportService from '../services/kumiteReportService';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
-import { FiX, FiCalendar, FiMapPin, FiDollarSign, FiUsers, FiClock, FiUser, FiCheck, FiUserPlus, FiPlus, FiTarget, FiAward, FiCreditCard, FiAlertCircle } from 'react-icons/fi';
+import { FiX, FiCalendar, FiMapPin, FiDollarSign, FiUsers, FiClock, FiUser, FiCheck, FiUserPlus, FiPlus, FiTarget, FiAward, FiCreditCard, FiAlertCircle, FiFileText } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PayHerePaymentModal from './PayHerePaymentModal';
+import KataReportView from './KataReportView';
+import KumiteReportView from './KumiteReportView';
 // PayHere frontend helpers removed; payment flow handled via server response or inline helpers where needed
 
 const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment }) => {
@@ -54,6 +58,9 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState(null);
   const [pendingCategory, setPendingCategory] = useState(null);
+  const [kataReports, setKataReports] = useState({}); // { categoryId: report }
+  const [kumiteReports, setKumiteReports] = useState({}); // { categoryId: report }
+  const [loadingReports, setLoadingReports] = useState(false);
 
   useEffect(() => {
     if (tournamentId) {
@@ -98,6 +105,12 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
       const tournamentData = tournamentResponse?.data || null;
       const categoriesData = categoriesResponse?.data || categoriesResponse || [];
       const matchesData = matchesResponse?.data || matchesResponse || [];
+      
+      // Load Kata and Kumite reports
+      if (tournamentData && categoriesData.length > 0) {
+        loadKataReports(categoriesData, tournamentData._id);
+        loadKumiteReports(categoriesData, tournamentData._id);
+      }
       const registrationsData = registrationsResponse?.data || registrationsResponse || [];
       
       if (!tournamentData) {
@@ -235,6 +248,87 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
       setTournament(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadKataReports = async (categories, tournamentId) => {
+    // Filter Kata categories
+    const kataCategories = categories.filter(cat => 
+      cat.category_type === 'Kata' || cat.category_type === 'Team Kata'
+    );
+
+    if (kataCategories.length === 0) {
+      return;
+    }
+
+    setLoadingReports(true);
+    try {
+      // Load reports for all Kata categories
+      const reportPromises = kataCategories.map(async (category) => {
+        try {
+          const response = await kataReportService.getReport(category._id);
+          if (response.success && response.data) {
+            return { categoryId: category._id, report: response.data };
+          }
+          return { categoryId: category._id, report: null };
+        } catch (error) {
+          // Report doesn't exist yet - that's okay
+          return { categoryId: category._id, report: null };
+        }
+      });
+
+      const reportResults = await Promise.all(reportPromises);
+      const reportsMap = {};
+      reportResults.forEach(({ categoryId, report }) => {
+        if (report) {
+          reportsMap[categoryId] = report;
+        }
+      });
+
+      setKataReports(reportsMap);
+    } catch (error) {
+      console.error('Error loading Kata reports:', error);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const loadKumiteReports = async (categories, tournamentId) => {
+    // Filter Kumite categories
+    const kumiteCategories = categories.filter(cat => 
+      cat.category_type === 'Kumite' || cat.category_type === 'Team Kumite'
+    );
+
+    if (kumiteCategories.length === 0) {
+      return;
+    }
+
+    try {
+      // Load reports for all Kumite categories
+      const reportPromises = kumiteCategories.map(async (category) => {
+        try {
+          const response = await kumiteReportService.getReport(category._id);
+          if (response.success && response.data) {
+            return { categoryId: category._id, report: response.data };
+          }
+          return { categoryId: category._id, report: null };
+        } catch (error) {
+          // Report doesn't exist yet - that's okay
+          return { categoryId: category._id, report: null };
+        }
+      });
+
+      const reportResults = await Promise.all(reportPromises);
+      const reportsMap = {};
+      reportResults.forEach(({ categoryId, report }) => {
+        if (report) {
+          reportsMap[categoryId] = report;
+        }
+      });
+
+      setKumiteReports(reportsMap);
+    } catch (error) {
+      console.error('Error loading Kumite reports:', error);
     }
   };
 
@@ -748,6 +842,103 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Kata Reports Section - Show published reports for Kata events */}
+          {((isCoach || isPlayer) && categories.some(cat => (cat.category_type === 'Kata' || cat.category_type === 'Team Kata'))) && (
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <FiFileText className="w-5 h-5 text-blue-600" />
+                Kata Event Results & Reports
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                View detailed results and round progression for Kata events. Reports are automatically updated when organizers publish them.
+              </p>
+              
+              {loadingReports ? (
+                <div className="flex justify-center items-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <p className="ml-4 text-gray-600">Loading reports...</p>
+                </div>
+              ) : (
+                (() => {
+                  const kataCategoriesWithReports = categories.filter(cat => 
+                    (cat.category_type === 'Kata' || cat.category_type === 'Team Kata') && 
+                    kataReports[cat._id]
+                  );
+
+                  if (kataCategoriesWithReports.length === 0) {
+                    return (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                        <FiFileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-600 mb-2">No reports published yet</p>
+                        <p className="text-sm text-gray-500">
+                          Reports will appear here once the organizer generates and publishes them.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-6">
+                      {kataCategoriesWithReports.map(category => (
+                        <div key={category._id}>
+                          <h4 className="text-lg font-semibold text-gray-800 mb-3">
+                            {category.category_name}
+                          </h4>
+                          <KataReportView report={kataReports[category._id]} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          )}
+
+          {/* Kumite Reports Section - Show published reports for Kumite events */}
+          {((isCoach || isPlayer) && categories.some(cat => (cat.category_type === 'Kumite' || cat.category_type === 'Team Kumite'))) && (
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <FiFileText className="w-5 h-5 text-red-600" />
+                Kumite Event Results & Reports
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                View detailed match results and round progression for Kumite events. Reports are automatically updated when organizers publish them.
+              </p>
+              
+              {(() => {
+                const kumiteCategoriesWithReports = categories.filter(cat => 
+                  (cat.category_type === 'Kumite' || cat.category_type === 'Team Kumite') && 
+                  kumiteReports[cat._id]
+                );
+
+                if (kumiteCategoriesWithReports.length === 0) {
+                  return (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                      <FiFileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-gray-600 mb-2">No reports published yet</p>
+                      <p className="text-sm text-gray-500">
+                        Reports will appear here once the organizer generates and publishes them.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-6">
+                    {kumiteCategoriesWithReports.map(category => (
+                      <div key={category._id}>
+                        <h4 className="text-lg font-semibold text-gray-800 mb-3">
+                          {category.category_name}
+                        </h4>
+                        <KumiteReportView report={kumiteReports[category._id]} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

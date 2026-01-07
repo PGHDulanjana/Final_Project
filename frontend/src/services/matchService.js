@@ -30,5 +30,21 @@ export const matchService = {
     const response = await api.delete(`/matches/${id}`);
     return response.data;
   },
+
+  // Generate match draws using Gemini AI
+  generateDraws: async (tournamentId, categoryId, useGemini = true) => {
+    const response = await api.post('/matches/generate-draws', {
+      tournament_id: tournamentId,
+      category_id: categoryId,
+      useGemini
+    });
+    return response.data;
+  },
+
+  // Calculate Kumite match winner
+  calculateKumiteMatchWinner: async (matchId) => {
+    const response = await api.post(`/matches/${matchId}/calculate-winner`);
+    return response.data;
+  },
 };
 

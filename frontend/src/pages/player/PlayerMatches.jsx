@@ -1,150 +1,111 @@
 import { useState, useEffect } from 'react';
 import { matchService } from '../../services/matchService';
 import { scoreService } from '../../services/scoreService';
+import { registrationService } from '../../services/registrationService';
+import { categoryService } from '../../services/categoryService';
+import { playerService } from '../../services/playerService';
+import kataPerformanceService from '../../services/kataPerformanceService';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
+import { FiTarget, FiRefreshCw, FiAward, FiTrendingUp } from 'react-icons/fi';
 import Layout from '../../components/Layout';
+import MatchDrawsBracket from '../../components/MatchDrawsBracket';
 
 const PlayerMatches = () => {
   const { user } = useAuth();
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
   const [matches, setMatches] = useState([]);
-  const [playerMatches, setPlayerMatches] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [kataPerformances, setKataPerformances] = useState([]);
+  const [playerProfile, setPlayerProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
+  // Auto-refresh match draws every 30 seconds
+  useEffect(() => {
+    if (user) {
+      const interval = setInterval(() => {
+        if (user?._id) {
+          loadData();
+        }
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const loadData = async () => {
+    if (!user?._id) return;
+    
     try {
-      // Get all matches
-      const matchesRes = await matchService.getMatches();
-      const allMatches = matchesRes.data || [];
+      setLoading(true);
+      
+      // Get player profile
+      let playerProfileData = null;
+      try {
+        const playersRes = await playerService.getPlayers();
+        const allPlayers = playersRes.data || [];
+        playerProfileData = allPlayers.find(p => {
+          const playerUserId = p.user_id?._id || p.user_id;
+          return String(playerUserId) === String(user._id);
+        });
+        setPlayerProfile(playerProfileData);
+      } catch (error) {
+        console.error('Error loading player profile:', error);
+      }
 
-      // Get all scores to help determine results
-      const scoresRes = await scoreService.getScores();
-      const allScores = scoresRes.data || [];
+      // Get all data in parallel
+      const [matchesRes, registrationsRes, categoriesRes] = await Promise.all([
+        matchService.getMatches(),
+        registrationService.getRegistrations(),
+        categoryService.getCategories()
+      ]);
 
-      // Get detailed match data with participants
-      const matchesWithDetails = await Promise.all(
-        allMatches.map(async (match) => {
-          try {
-            const matchDetail = await matchService.getMatch(match._id);
-            return matchDetail.data || match;
-          } catch (error) {
-            return match;
-          }
-        })
+      setMatches(matchesRes.data || []);
+      setRegistrations(registrationsRes.data || []);
+      const allCategories = categoriesRes.data || [];
+      setCategories(allCategories);
+
+      // Load Kata performances for Kata events
+      const kataCategories = allCategories.filter(c => 
+        c.category_type === 'Kata' || c.category_type === 'Team Kata'
       );
-
-      // Process matches to find player's matches
-      const processedMatches = processPlayerMatches(matchesWithDetails, allScores, user);
-      setMatches(allMatches);
-      setPlayerMatches(processedMatches);
+      
+      if (kataCategories.length > 0 && playerProfileData) {
+        try {
+          console.log('Loading Kata performances for categories:', kataCategories.map(c => c._id));
+          const kataPromises = kataCategories.map(c => 
+            kataPerformanceService.getPerformances({ category_id: c._id })
+              .catch((err) => {
+                console.error(`Error loading performances for category ${c._id}:`, err);
+                return { data: [] };
+              })
+          );
+          const kataResults = await Promise.all(kataPromises);
+          const allKataPerformances = kataResults.flatMap(res => res.data || []);
+          console.log('Loaded Kata performances:', allKataPerformances.length, allKataPerformances);
+          setKataPerformances(allKataPerformances);
+        } catch (error) {
+          console.error('Error loading Kata performances:', error);
+          setKataPerformances([]);
+        }
+      } else {
+        console.log('No Kata categories or player profile:', { kataCategories: kataCategories.length, playerProfile: !!playerProfileData });
+        setKataPerformances([]);
+      }
     } catch (error) {
-      console.error('Error loading matches:', error);
+      console.error('Error loading match draws:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const processPlayerMatches = (matches, scores, currentUser) => {
-    const playerMatchesList = [];
-
-    matches.forEach((match) => {
-      const participants = match.participants || [];
-      
-      // Find if current user is a participant
-      const playerParticipant = participants.find(p => {
-        const playerUserId = p.player_id?.user_id?._id || p.player_id?.user_id;
-        return playerUserId === currentUser?._id || playerUserId?.toString() === currentUser?._id?.toString();
-      });
-
-      if (playerParticipant) {
-        // Get opponent
-        const opponent = participants.find(p => {
-          const playerUserId = p.player_id?.user_id?._id || p.player_id?.user_id;
-          return playerUserId !== currentUser?._id && playerUserId?.toString() !== currentUser?._id?.toString();
-        });
-
-        // Get scores for this match
-        const matchScores = scores.filter(
-          score => score.match_id?._id === match._id || score.match_id === match._id
-        );
-
-        // Determine result
-        let result = 'Pending';
-        let score = null;
-
-        if (match.status === 'Completed') {
-          // Check participant result first
-          if (playerParticipant.result) {
-            result = playerParticipant.result;
-          } else if (match.winner_id) {
-            // Check if player is winner
-            const playerId = playerParticipant.player_id?._id || playerParticipant.player_id;
-            const winnerId = match.winner_id?._id || match.winner_id;
-            result = playerId?.toString() === winnerId?.toString() ? 'Win' : 'Loss';
-          } else if (matchScores.length > 0) {
-            // Calculate from scores
-            const playerScores = matchScores.filter(s => {
-              const participantId = s.participant_id?._id || s.participant_id;
-              return participantId?.toString() === (playerParticipant._id?.toString() || playerParticipant._id);
-            });
-            const opponentScores = matchScores.filter(s => {
-              const participantId = s.participant_id?._id || s.participant_id;
-              return participantId?.toString() !== (playerParticipant._id?.toString() || playerParticipant._id);
-            });
-
-            if (playerScores.length > 0 && opponentScores.length > 0) {
-              const playerAvg = playerScores.reduce((sum, s) => sum + (s.final_score || 0), 0) / playerScores.length;
-              const opponentAvg = opponentScores.reduce((sum, s) => sum + (s.final_score || 0), 0) / opponentScores.length;
-              result = playerAvg > opponentAvg ? 'Win' : playerAvg < opponentAvg ? 'Loss' : 'Draw';
-              score = `${playerAvg.toFixed(1)}-${opponentAvg.toFixed(1)}`;
-            }
-          }
-        }
-
-        // Get opponent name
-        const opponentName = opponent?.player_id?.user_id 
-          ? `${opponent.player_id.user_id.first_name || ''} ${opponent.player_id.user_id.last_name || ''}`.trim() || 'Opponent'
-          : opponent?.team_id?.team_name || 'Opponent';
-
-        playerMatchesList.push({
-          id: match._id,
-          tournament: match.tournament_id?.tournament_name || 'Tournament',
-          opponent: opponentName,
-          category: match.category_id?.category_name || match.match_type || 'Category',
-          date: format(new Date(match.scheduled_time), 'yyyy-MM-dd'),
-          time: format(new Date(match.scheduled_time), 'hh:mm a'),
-          venue: match.venue_area || match.tournament_id?.venue || 'Venue TBD',
-          status: match.status === 'Completed' ? 'Completed' : match.status === 'In Progress' ? 'In Progress' : 'Upcoming',
-          result: result,
-          score: score,
-          round: match.match_level || 'Match',
-          matchType: match.match_type,
-          scheduledTime: match.scheduled_time,
-        });
-      }
-    });
-
-    return playerMatchesList.sort((a, b) => new Date(b.scheduledTime) - new Date(a.scheduledTime));
-  };
-
-  const filteredMatches = playerMatches.filter(match => {
-    const matchesFilter = filterStatus === 'all' || match.status.toLowerCase() === filterStatus.toLowerCase();
-    const matchesSearch = match.tournament.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         match.opponent.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         match.category.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
-
-  const upcomingCount = playerMatches.filter(m => m.status === 'Upcoming').length;
-  const completedCount = playerMatches.filter(m => m.status === 'Completed').length;
-  const winCount = playerMatches.filter(m => m.result === 'Win').length;
-  const lossCount = playerMatches.filter(m => m.result === 'Loss').length;
 
   if (loading) {
     return (
@@ -162,219 +123,362 @@ const PlayerMatches = () => {
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
-              My Matches
-            </h1>
-            <p className="text-gray-600">View your upcoming and completed matches</p>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500 hover:shadow-xl transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm font-medium">Total Matches</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">{playerMatches.length}</p>
-                </div>
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
+                  {(() => {
+                    // Check if player has any Kata events registered
+                    const hasKataEvents = registrations.some(r => {
+                      const regPlayerId = r.player_id?._id || r.player_id;
+                      const playerId = playerProfile?._id;
+                      const isPlayerReg = (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                                         r.registration_type === 'Individual' &&
+                                         r.approval_status === 'Approved' &&
+                                         r.payment_status === 'Paid';
+                      if (!isPlayerReg) return false;
+                      const category = categories.find(c => {
+                        const catId = c._id?.toString();
+                        const regCatId = r.category_id?._id?.toString() || r.category_id?.toString();
+                        return catId === regCatId;
+                      });
+                      return category && (category.category_type === 'Kata' || category.category_type === 'Team Kata');
+                    });
+                    return hasKataEvents ? 'Match Player List' : 'Match Draws';
+                  })()}
+                </h1>
+                <p className="text-gray-600">
+                  {(() => {
+                    const hasKataEvents = registrations.some(r => {
+                      const regPlayerId = r.player_id?._id || r.player_id;
+                      const playerId = playerProfile?._id;
+                      const isPlayerReg = (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                                         r.registration_type === 'Individual' &&
+                                         r.approval_status === 'Approved' &&
+                                         r.payment_status === 'Paid';
+                      if (!isPlayerReg) return false;
+                      const category = categories.find(c => {
+                        const catId = c._id?.toString();
+                        const regCatId = r.category_id?._id?.toString() || r.category_id?.toString();
+                        return catId === regCatId;
+                      });
+                      return category && (category.category_type === 'Kata' || category.category_type === 'Team Kata');
+                    });
+                    return hasKataEvents 
+                      ? 'View player lists and round progression for Kata events you are registered for'
+                      : 'View match draws for events you are registered for';
+                  })()}
+                </p>
               </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-cyan-500 hover:shadow-xl transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm font-medium">Upcoming</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">{upcomingCount}</p>
-                </div>
-                <div className="p-3 bg-cyan-100 rounded-lg">
-                  <svg className="w-8 h-8 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500 hover:shadow-xl transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm font-medium">Wins</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">{winCount}</p>
-                </div>
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-red-500 hover:shadow-xl transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm font-medium">Losses</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">{lossCount}</p>
-                </div>
-                <div className="p-3 bg-red-100 rounded-lg">
-                  <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
-              </div>
+              <button
+                onClick={() => loadData()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+              >
+                <FiRefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by tournament, opponent, or category..."
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <svg className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setFilterStatus('all')}
-                  className={`flex-1 px-4 py-2 rounded-lg font-semibold transition duration-200 ${
-                    filterStatus === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setFilterStatus('upcoming')}
-                  className={`flex-1 px-4 py-2 rounded-lg font-semibold transition duration-200 ${
-                    filterStatus === 'upcoming' ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Upcoming
-                </button>
-                <button
-                  onClick={() => setFilterStatus('completed')}
-                  className={`flex-1 px-4 py-2 rounded-lg font-semibold transition duration-200 ${
-                    filterStatus === 'completed' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Completed
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Match Draws Content */}
+          {(() => {
+            // Get player's registered events (categories)
+            const playerRegisteredEvents = registrations
+              .filter(r => {
+                const regPlayerId = r.player_id?._id || r.player_id;
+                const playerId = playerProfile?._id;
+                return (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                       r.registration_type === 'Individual' &&
+                       r.approval_status === 'Approved' &&
+                       r.payment_status === 'Paid';
+              })
+              .map(r => r.category_id?._id || r.category_id)
+              .filter(Boolean);
 
-          {/* Matches List */}
-          <div className="space-y-4">
-            {filteredMatches.map((match) => (
-              <div key={match.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300">
-                <div className={`h-2 ${
-                  match.status === 'Upcoming' || match.status === 'Scheduled' ? 'bg-gradient-to-r from-cyan-500 to-blue-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'
-                }`}></div>
-                <div className="p-6">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">{match.tournament}</h3>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
-                          {match.round}
-                        </span>
-                        <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-semibold">
-                          {match.category}
-                        </span>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          match.status === 'Upcoming' || match.status === 'Scheduled' ? 'bg-cyan-100 text-cyan-700' : 
-                          match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'
-                        }`}>
-                          {match.status}
-                        </span>
-                        {match.result !== 'Pending' && match.result && (
+            // Get categories for registered events
+            const registeredCategories = categories.filter(c => 
+              playerRegisteredEvents.some(eventId => 
+                c._id?.toString() === eventId?.toString() || c._id === eventId
+              )
+            );
+
+            // Group matches and Kata performances by category
+            const matchesByCategory = {};
+            console.log('Processing categories:', registeredCategories.length);
+            console.log('Kata performances available:', kataPerformances.length);
+            console.log('Matches available:', matches.length);
+            
+            registeredCategories.forEach(category => {
+              const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
+              
+              if (isKata) {
+                // For Kata events, check for Kata performances
+                const eventKataPerformances = kataPerformances.filter(p => {
+                  const perfCategoryId = p.category_id?._id || p.category_id;
+                  const categoryIdStr = String(category._id);
+                  const perfCategoryIdStr = String(perfCategoryId);
+                  const matches = categoryIdStr === perfCategoryIdStr;
+                  if (matches) {
+                    console.log('Found Kata performance for category:', category.category_name, p);
+                  }
+                  return matches;
+                });
+                
+                console.log(`Category ${category.category_name} (${category._id}): ${eventKataPerformances.length} performances`);
+                
+                // Always include Kata categories even if no performances yet (so player knows they're registered)
+                matchesByCategory[category._id] = {
+                  category,
+                  matches: [], // No matches for Kata
+                  kataPerformances: eventKataPerformances
+                };
+              } else {
+                // For Kumite events, check for matches
+                const categoryMatches = matches.filter(m => {
+                  const matchCategoryId = m.category_id?._id || m.category_id;
+                  return matchCategoryId?.toString() === category._id?.toString() || matchCategoryId === category._id;
+                });
+                if (categoryMatches.length > 0) {
+                  matchesByCategory[category._id] = {
+                    category,
+                    matches: categoryMatches
+                  };
+                }
+              }
+            });
+
+            // For Kata events, always show the category even if no performances yet
+            // This allows players to see they're registered and waiting for rounds
+            registeredCategories.forEach(category => {
+              const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
+              if (isKata && !matchesByCategory[category._id]) {
+                matchesByCategory[category._id] = {
+                  category,
+                  matches: [],
+                  kataPerformances: []
+                };
+              }
+            });
+
+            const hasMatchDraws = Object.keys(matchesByCategory).length > 0;
+
+            if (registeredCategories.length === 0) {
+              return (
+                <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                  <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">No Registered Events</h3>
+                  <p className="text-gray-600 mb-4">You need to register and get approved for events to see match draws</p>
+                </div>
+              );
+            }
+
+            if (!hasMatchDraws) {
+              // Check if there are Kata events registered
+              const hasKataEvents = registeredCategories.some(c => 
+                c.category_type === 'Kata' || c.category_type === 'Team Kata'
+              );
+              
+              return (
+                <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                  <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">
+                    {hasKataEvents ? 'No Player Lists Yet' : 'No Match Draws Yet'}
+                  </h3>
+                  <p className="text-gray-600">
+                    {hasKataEvents 
+                      ? 'Player lists and round progression will appear here once the organizer creates rounds for your registered Kata events'
+                      : 'Match draws will appear here once the organizer creates them for your registered events'}
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-8">
+                {Object.values(matchesByCategory).map(({ category, matches: categoryMatches, kataPerformances: categoryKataPerformances }) => {
+                  const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
+                  const isKumite = category.category_type === 'Kumite' || category.category_type === 'Team Kumite';
+                  
+                  // Get Kata performances for this category (use from matchesByCategory or filter)
+                  const eventKataPerformances = categoryKataPerformances || kataPerformances.filter(p => {
+                    const perfCategoryId = p.category_id?._id || p.category_id;
+                    return String(perfCategoryId) === String(category._id);
+                  });
+
+                  // Group Kata performances by round
+                  const performancesByRound = {};
+                  eventKataPerformances.forEach(perf => {
+                    const round = perf.round || 'First Round';
+                    if (!performancesByRound[round]) {
+                      performancesByRound[round] = [];
+                    }
+                    performancesByRound[round].push(perf);
+                  });
+
+                  const rounds = ['First Round', 'Second Round (Final 8)', 'Third Round (Final 4)'];
+                  
+                  return (
+                    <div key={category._id} className="bg-white rounded-xl shadow-lg p-6">
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-2xl font-bold text-gray-800">{category.category_name}</h3>
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            match.result === 'Win' ? 'bg-green-100 text-green-700' : 
-                            match.result === 'Loss' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                            isKata ? 'bg-blue-100 text-blue-700' :
+                            isKumite ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
                           }`}>
-                            {match.result} {match.score ? `(${match.score})` : ''}
+                            {category.category_type}
                           </span>
-                        )}
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {category.participation_type} • {
+                            isKata 
+                              ? `${Object.keys(performancesByRound).length} round${Object.keys(performancesByRound).length !== 1 ? 's' : ''} • ${eventKataPerformances.length} player${eventKataPerformances.length !== 1 ? 's' : ''}`
+                              : `${categoryMatches.length} match${categoryMatches.length !== 1 ? 'es' : ''}`
+                          }
+                        </p>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center text-gray-600 mb-1">
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="font-semibold">{match.date}</span>
-                      </div>
-                      <div className="flex items-center text-gray-600">
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span className="font-semibold">{match.time}</span>
-                      </div>
-                    </div>
-                  </div>
+                      
+                      {isKata && eventKataPerformances.length > 0 ? (
+                        // Display Kata rounds with player lists - Kata Event - Round Progression
+                        <div className="space-y-6">
+                          <div className="mb-4 pb-4 border-b border-gray-200">
+                            <h4 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                              <FiTrendingUp className="mr-2 text-blue-600" />
+                              Kata Event - Round Progression
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              View players who advanced through each round. Players are ranked by final score.
+                            </p>
+                          </div>
+                          {rounds.map(round => {
+                            const roundPerformances = performancesByRound[round] || [];
+                            if (roundPerformances.length === 0) return null;
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center text-white font-bold">
-                        {user?.first_name?.[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || 'Y'}
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">You</p>
-                        <p className="font-bold text-gray-800">{user?.first_name || user?.username || 'You'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-center">
-                      <span className="text-2xl font-bold text-gray-400">VS</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white font-bold">
-                        {match.opponent.split(' ').map(n => n[0]).join('').toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Opponent</p>
-                        <p className="font-bold text-gray-800">{match.opponent}</p>
-                      </div>
-                    </div>
-                  </div>
+                            // Sort performances: by place (for Final 4), then by final_score, then by performance_order
+                            const sortedPerformances = [...roundPerformances].sort((a, b) => {
+                              if (round === 'Third Round (Final 4)') {
+                                if (a.place !== null && b.place !== null) {
+                                  return a.place - b.place;
+                                }
+                                if (a.place !== null) return -1;
+                                if (b.place !== null) return 1;
+                              }
+                              if (a.final_score === null && b.final_score === null) {
+                                return (a.performance_order || 0) - (b.performance_order || 0);
+                              }
+                              if (a.final_score === null) return 1;
+                              if (b.final_score === null) return -1;
+                              if (b.final_score !== a.final_score) {
+                                return b.final_score - a.final_score;
+                              }
+                              return (a.performance_order || 0) - (b.performance_order || 0);
+                            });
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                    <div className="flex items-center text-gray-600">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span className="font-semibold">{match.venue}</span>
+                            return (
+                              <div key={round} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                                <div className="flex items-center justify-between mb-4">
+                                  <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                    <FiAward className="w-5 h-5 text-blue-600" />
+                                    {round}
+                                  </h4>
+                                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                                    {roundPerformances.length} Player{roundPerformances.length !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  {sortedPerformances.map((performance, index) => {
+                                    const playerName = performance.player_id?.user_id
+                                      ? `${performance.player_id.user_id.first_name || ''} ${performance.player_id.user_id.last_name || ''}`.trim() || performance.player_id.user_id.username
+                                      : 'Player';
+                                    const isCurrentPlayer = playerProfile && (
+                                      performance.player_id?._id?.toString() === playerProfile._id?.toString() ||
+                                      performance.player_id?.toString() === playerProfile._id?.toString()
+                                    );
+                                    const scoresCount = performance.scores?.length || 0;
+                                    
+                                    return (
+                                      <div
+                                        key={performance._id}
+                                        className={`rounded-lg p-4 border-2 transition ${
+                                          isCurrentPlayer
+                                            ? 'bg-blue-50 border-blue-400 shadow-md'
+                                            : 'bg-white border-gray-200'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-4 flex-1">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                                              isCurrentPlayer
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-gray-200 text-gray-700'
+                                            }`}>
+                                              {round === 'Third Round (Final 4)' && performance.place
+                                                ? performance.place
+                                                : index + 1}
+                                            </div>
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-2">
+                                                <p className={`font-semibold ${
+                                                  isCurrentPlayer ? 'text-blue-800' : 'text-gray-800'
+                                                }`}>
+                                                  {playerName}
+                                                  {isCurrentPlayer && (
+                                                    <span className="ml-2 text-xs text-blue-600">(You)</span>
+                                                  )}
+                                                </p>
+                                              </div>
+                                              <div className="flex items-center gap-4 mt-1 text-xs text-gray-600">
+                                                <span>Order: {performance.performance_order}</span>
+                                                {scoresCount > 0 && (
+                                                  <span className="text-blue-600">
+                                                    {scoresCount}/5 judges scored
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="text-right">
+                                            {performance.final_score !== null ? (
+                                              <div>
+                                                <p className="text-2xl font-bold text-green-600">
+                                                  {performance.final_score.toFixed(1)}
+                                                </p>
+                                                <p className="text-xs text-gray-500">Final Score</p>
+                                              </div>
+                                            ) : (
+                                              <div>
+                                                <p className="text-lg font-semibold text-gray-400">-</p>
+                                                <p className="text-xs text-gray-500">Pending</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : isKata && eventKataPerformances.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <p className="text-gray-600">No rounds created yet. The organizer will create rounds for this event.</p>
+                        </div>
+                      ) : (
+                        // Display Kumite match bracket
+                        <MatchDrawsBracket 
+                          matches={categoryMatches} 
+                          category={category}
+                        />
+                      )}
                     </div>
-                    <button className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition duration-200 flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                      View Details
-                    </button>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-
-          {filteredMatches.length === 0 && (
-            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-              <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">No Matches Found</h3>
-              <p className="text-gray-600">No matches match your current filter criteria.</p>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </Layout>

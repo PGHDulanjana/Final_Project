@@ -26,13 +26,11 @@ import Notifications from './pages/player/Notifications';
 import CoachNotifications from './pages/coach/Notifications';
 import JudgeDashboard from './pages/judge/JudgeDashboard';
 import ActiveMatches from './pages/judge/ActiveMatches';
-import LiveScoring from './pages/judge/LiveScoring';
 import ScoredMatches from './pages/judge/ScoredMatches';
 import JudgeSchedule from './pages/judge/JudgeSchedule';
 import CoachDashboard from './pages/coach/CoachDashboard';
-import MyTeams from './pages/coach/MyTeams';
-import TeamTournaments from './pages/coach/TeamTournaments';
-import TeamStats from './pages/coach/TeamStats';
+import KumiteMatchDraws from './pages/coach/KumiteMatchDraws';
+import KataPlayerLists from './pages/coach/KataPlayerLists';
 import Schedule from './pages/coach/Schedule';
 import OrganizerDashboard from './pages/organizer/OrganizerDashboard';
 import TournamentManagement from './pages/organizer/TournamentManagement';
@@ -41,6 +39,7 @@ import Participants from './pages/organizer/Participants';
 import OrganizerSchedule from './pages/organizer/OrganizerSchedule';
 import OrganizerPayments from './pages/organizer/Payments';
 import CategoryManagement from './pages/organizer/CategoryManagement';
+import TatamiDashboard from './pages/tatami/TatamiDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminRegister from './pages/admin/AdminRegister';
 import UserManagement from './pages/admin/UserManagement';
@@ -206,15 +205,6 @@ const AppRoutes = () => {
       />
 
       <Route
-        path="/judge/scoring"
-        element={
-          <ProtectedRoute allowedRoles={['Judge']}>
-            <LiveScoring />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
         path="/judge/scored"
         element={
           <ProtectedRoute allowedRoles={['Judge']}>
@@ -242,28 +232,19 @@ const AppRoutes = () => {
       />
 
       <Route
-        path="/coach/teams"
+        path="/coach/kumite-match-draws"
         element={
           <ProtectedRoute allowedRoles={['Coach']}>
-            <MyTeams />
+            <KumiteMatchDraws />
           </ProtectedRoute>
         }
       />
 
       <Route
-        path="/coach/tournaments"
+        path="/coach/kata-player-lists"
         element={
           <ProtectedRoute allowedRoles={['Coach']}>
-            <TeamTournaments />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/coach/stats"
-        element={
-          <ProtectedRoute allowedRoles={['Coach']}>
-            <TeamStats />
+            <KataPlayerLists />
           </ProtectedRoute>
         }
       />
@@ -345,6 +326,16 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['Organizer']}>
             <CategoryManagement />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Tatami Dashboard - Accessible by Table Workers, Judges, and Organizers */}
+      <Route
+        path="/tatami/:id"
+        element={
+          <ProtectedRoute>
+            <TatamiDashboard />
           </ProtectedRoute>
         }
       />

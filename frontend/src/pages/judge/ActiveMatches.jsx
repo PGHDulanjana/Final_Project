@@ -252,16 +252,6 @@ const ActiveMatches = () => {
                     <p className="text-sm text-gray-600">
                       {match.match_level || 'Match Level'}
                     </p>
-                    <button
-                      onClick={() => {
-                        // Navigate to live scoring for this match
-                        window.location.href = `/judge/scoring?match=${match._id}`;
-                      }}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition duration-200 flex items-center"
-                    >
-                      <FiZap className="w-5 h-5 mr-2" />
-                      Score Match
-                    </button>
                   </div>
                 </div>
               </motion.div>

@@ -37,21 +37,21 @@ const Layout = ({ children, showSideNav = true }) => {
               </Link>
               {!showSideNav && (
                 <div className="ml-10 flex items-center space-x-4">
-                  {isJudge && (
-                    <Link
-                      to="/judge/scoring"
-                      className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium"
-                    >
-                      Scoring
-                    </Link>
-                  )}
                   {isCoach && (
-                    <Link
-                      to="/coach/teams"
-                      className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium"
-                    >
-                      My Teams
-                    </Link>
+                    <>
+                      <Link
+                        to="/coach/kumite-match-draws"
+                        className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium"
+                      >
+                        Kumite Match Draws
+                      </Link>
+                      <Link
+                        to="/coach/kata-player-lists"
+                        className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium"
+                      >
+                        Kata Player Lists
+                      </Link>
+                    </>
                   )}
                   {isOrganizer && (
                     <Link

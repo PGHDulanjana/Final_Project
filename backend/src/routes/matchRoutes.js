@@ -5,13 +5,17 @@ const {
   getMatch,
   createMatch,
   updateMatch,
-  deleteMatch
+  deleteMatch,
+  generateDraws,
+  calculateKumiteMatchWinner
 } = require('../controllers/matchController');
 const authenticate = require('../middlewares/authMiddleware');
 
 router.get('/', getMatches);
 router.get('/:id', getMatch);
 router.post('/', authenticate, createMatch);
+router.post('/generate-draws', authenticate, generateDraws);
+router.post('/:id/calculate-winner', authenticate, calculateKumiteMatchWinner);
 router.put('/:id', authenticate, updateMatch);
 router.delete('/:id', authenticate, deleteMatch);
 

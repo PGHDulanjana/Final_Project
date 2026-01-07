@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { playerService } from '../../services/playerService';
 import { toast } from 'react-toastify';
 import Layout from '../../components/Layout';
+import ChatbotPopup from '../../components/ChatbotPopup';
 import { FiUser, FiSave, FiEdit, FiX, FiAward, FiTarget, FiUsers } from 'react-icons/fi';
 
 const PlayerProfile = () => {
@@ -515,6 +516,9 @@ const PlayerProfile = () => {
           </div>
         </div>
       </div>
+
+      {/* Chatbot Popup */}
+      <ChatbotPopup />
     </Layout>
   );
 };

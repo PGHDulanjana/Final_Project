@@ -9,10 +9,11 @@ const { sendRegistrationConfirmation } = require('../utils/emailService');
 // @access  Private
 const getRegistrations = async (req, res, next) => {
   try {
-    const { tournament_id, player_id, approval_status } = req.query;
+    const { tournament_id, category_id, player_id, approval_status } = req.query;
     const query = {};
 
     if (tournament_id) query.tournament_id = tournament_id;
+    if (category_id) query.category_id = category_id;
     if (player_id) query.player_id = player_id;
     if (approval_status) query.approval_status = approval_status;
 
@@ -54,14 +55,44 @@ const getRegistrations = async (req, res, next) => {
           { registration_type: 'Judge', judge_id: judge._id },
           { registration_type: { $ne: 'Judge' } }
         ];
+      } else {
+        // If judge profile doesn't exist, only show non-judge registrations
+        // This prevents showing other judges' registrations when the user doesn't have a judge profile yet
+        query.registration_type = { $ne: 'Judge' };
       }
     }
 
     const registrations = await Registration.find(query)
       .populate('tournament_id', 'tournament_name start_date end_date venue status')
       .populate('category_id', 'category_name individual_player_fee team_event_fee category_type participation_type team_size')
-      .populate('player_id', 'user_id')
-      .populate('team_id', 'team_name')
+      .populate({
+        path: 'player_id',
+        select: 'user_id belt_rank dojo_name',
+        populate: {
+          path: 'user_id',
+          select: 'first_name last_name username'
+        }
+      })
+      .populate({
+        path: 'team_id',
+        select: 'team_name dojo_id',
+        populate: [
+          {
+            path: 'dojo_id',
+            select: 'dojo_name'
+          },
+          {
+            path: 'members',
+            populate: {
+              path: 'player_id',
+              populate: {
+                path: 'user_id',
+                select: 'first_name last_name username'
+              }
+            }
+          }
+        ]
+      })
       .populate({
         path: 'coach_id',
         select: 'user_id',
@@ -311,18 +342,33 @@ const createRegistration = async (req, res, next) => {
       }
     }
 
-    if (tournament.status !== 'Open') {
-      return res.status(400).json({
-        success: false,
-        message: 'Tournament is not open for registration'
-      });
-    }
+    // For Judge and Coach registrations, allow registration for Draft, Open, and Ongoing tournaments
+    // For Individual and Team registrations, only allow Open tournaments
+    if (registration_type === 'Judge' || registration_type === 'Coach') {
+      // Judges and coaches can register for tournaments that are not cancelled or completed
+      if (tournament.status === 'Cancelled' || tournament.status === 'Completed') {
+        return res.status(400).json({
+          success: false,
+          message: 'Tournament is cancelled or completed. Registration is not available.'
+        });
+      }
+      // For judges and coaches, don't enforce registration deadline strictly
+      // They can register even if deadline has passed (for ongoing tournaments)
+    } else {
+      // For Individual and Team registrations, only allow Open tournaments
+      if (tournament.status !== 'Open') {
+        return res.status(400).json({
+          success: false,
+          message: 'Tournament is not open for registration'
+        });
+      }
 
-    if (new Date() > new Date(tournament.registration_deadline)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Registration deadline has passed'
-      });
+      if (new Date() > new Date(tournament.registration_deadline)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Registration deadline has passed'
+        });
+      }
     }
 
     // For individual registration, playerIdToUse should be set by now
@@ -1313,10 +1359,78 @@ const updateRegistration = async (req, res, next) => {
       });
     }
 
+    const oldApprovalStatus = registration.approval_status;
+    
     registration = await Registration.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
-    });
+    })
+      .populate('player_id', 'user_id')
+      .populate('team_id')
+      .populate('category_id', 'category_name')
+      .populate('tournament_id', 'tournament_name');
+
+    // Send notification if registration was just approved and payment is paid
+    if (oldApprovalStatus !== 'Approved' && registration.approval_status === 'Approved' && registration.payment_status === 'Paid') {
+      const { createAndSendNotification } = require('../services/notificationService');
+      
+      // Get player user ID
+      let playerUserId = null;
+      if (registration.registration_type === 'Individual' && registration.player_id) {
+        const playerUserIdRef = registration.player_id.user_id?._id || registration.player_id.user_id;
+        if (playerUserIdRef) {
+          playerUserId = playerUserIdRef.toString();
+        }
+      } else if (registration.registration_type === 'Team' && registration.team_id) {
+        // For teams, notify all team members
+        const Team = require('../models/Team');
+        const TeamMember = require('../models/TeamMember');
+        const team = await Team.findById(registration.team_id).populate('coach_id', 'user_id');
+        
+        // Get all team members
+        const teamMembers = await TeamMember.find({ team_id: registration.team_id })
+          .populate('player_id', 'user_id');
+        
+        const teamMemberUserIds = teamMembers
+          .map(m => m.player_id?.user_id?._id || m.player_id?.user_id)
+          .filter(Boolean)
+          .map(id => id.toString());
+        
+        // Also notify coach
+        if (team.coach_id?.user_id) {
+          const coachUserId = team.coach_id.user_id._id || team.coach_id.user_id;
+          if (coachUserId) {
+            teamMemberUserIds.push(coachUserId.toString());
+          }
+        }
+        
+        // Send notifications to all team members and coach
+        const categoryName = registration.category_id?.category_name || 'Event';
+        const tournamentName = registration.tournament_id?.tournament_name || 'Tournament';
+        
+        for (const userId of teamMemberUserIds) {
+          await createAndSendNotification(
+            userId,
+            'Registration Approved',
+            `Your team registration for "${categoryName}" in "${tournamentName}" has been approved!`,
+            'Registration'
+          );
+        }
+      }
+      
+      // Send notification to individual player
+      if (playerUserId && registration.registration_type === 'Individual') {
+        const categoryName = registration.category_id?.category_name || 'Event';
+        const tournamentName = registration.tournament_id?.tournament_name || 'Tournament';
+        
+        await createAndSendNotification(
+          playerUserId,
+          'Registration Approved',
+          `Your registration for "${categoryName}" in "${tournamentName}" has been approved! Payment confirmed.`,
+          'Registration'
+        );
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -1355,7 +1469,17 @@ const deleteRegistration = async (req, res, next) => {
           select: '_id'
         }
       })
-      .populate('tournament_id');
+      .populate({
+        path: 'tournament_id',
+        populate: {
+          path: 'organizer_id',
+          select: '_id user_id',
+          populate: {
+            path: 'user_id',
+            select: '_id'
+          }
+        }
+      });
 
     if (!registration) {
       return res.status(404).json({
@@ -1410,14 +1534,86 @@ const deleteRegistration = async (req, res, next) => {
     const coachUserId = await getUserIdFromRef(registration.coach_id, 'coach');
     const judgeUserId = await getUserIdFromRef(registration.judge_id, 'judge');
     
-    const isPlayer = playerUserId === req.user._id.toString();
+    const reqUserId = req.user._id.toString();
+    
+    const isPlayer = playerUserId && playerUserId === reqUserId;
     const isCoach = registration.registration_type === 'Coach' && 
-                    coachUserId === req.user._id.toString();
-    const isJudge = registration.registration_type === 'Judge' && 
-                    judgeUserId === req.user._id.toString();
+                    coachUserId && coachUserId === reqUserId;
+    
+    // For judge authorization, check if the registration's judge_id matches the user's judge profile
+    let isJudge = false;
+    if (registration.registration_type === 'Judge' && req.user.user_type === 'Judge') {
+      // Get the user's judge profile
+      const Judge = require('../models/Judge');
+      const userJudgeProfile = await Judge.findOne({ user_id: req.user._id });
+      
+      // Get the registration's judge_id (could be ObjectId or populated)
+      const regJudgeId = registration.judge_id?._id?.toString() || registration.judge_id?.toString();
+      
+      console.log('🔵 Judge authorization check:', {
+        reqUserId: reqUserId,
+        userJudgeProfileId: userJudgeProfile?._id?.toString(),
+        regJudgeId: regJudgeId,
+        judgeUserId: judgeUserId,
+        judgeIdFromRegistration: registration.judge_id?._id?.toString() || registration.judge_id?.toString()
+      });
+      
+      // If user doesn't have a judge profile, they cannot delete judge registrations
+      if (!userJudgeProfile) {
+        console.log('❌ Judge authorization failed - user has no judge profile');
+        isJudge = false;
+      } else if (regJudgeId) {
+        const userJudgeId = userJudgeProfile._id.toString();
+        // Compare judge profile IDs directly
+        if (regJudgeId === userJudgeId) {
+          isJudge = true;
+          console.log('✅ Judge authorization: Match by judge profile ID');
+        } else {
+          // Additional check: fetch the registration's judge profile and verify user_id
+          try {
+            const regJudgeProfile = await Judge.findById(regJudgeId).populate('user_id', '_id');
+            if (regJudgeProfile && regJudgeProfile.user_id) {
+              const regJudgeUserId = regJudgeProfile.user_id?._id?.toString() || 
+                                    regJudgeProfile.user_id?.toString();
+              if (regJudgeUserId === reqUserId) {
+                isJudge = true;
+                console.log('✅ Judge authorization: Match by fetching judge profile from registration');
+              } else {
+                console.log('❌ Judge authorization failed - user mismatch:', {
+                  regJudgeUserId,
+                  reqUserId,
+                  regJudgeId,
+                  userJudgeId
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching judge profile for authorization:', error);
+          }
+        }
+      }
+      
+      // Fallback: also check user_id match if judge_id is populated with user_id
+      if (!isJudge && judgeUserId && judgeUserId === reqUserId) {
+        isJudge = true;
+        console.log('✅ Judge authorization: Match by user_id');
+      }
+    }
+    
     const isAdmin = req.user.user_type === 'Admin';
-    const isOrganizer = req.user.user_type === 'Organizer' && 
-      registration.tournament_id?.organizer_id?.toString() === req.user._id.toString();
+    
+    // Check organizer authorization - tournament organizer can cancel any registration for their tournament
+    let isOrganizer = false;
+    if (req.user.user_type === 'Organizer' && registration.tournament_id) {
+      const organizerId = registration.tournament_id.organizer_id;
+      if (organizerId) {
+        // Check if organizer_id matches (could be ObjectId or populated)
+        const organizerUserId = organizerId.user_id?._id?.toString() || 
+                               organizerId.user_id?.toString() || 
+                               organizerId.toString();
+        isOrganizer = organizerUserId === reqUserId;
+      }
+    }
     
     // Debug logging
     console.log('🔵 deleteRegistration - Authorization check:', {
@@ -1433,8 +1629,12 @@ const deleteRegistration = async (req, res, next) => {
       isJudge,
       isAdmin,
       isOrganizer,
-      coachId: registration.coach_id?._id?.toString() || registration.coach_id?.toString(),
-      coachPopulated: !!registration.coach_id?.user_id
+      judgeId: registration.judge_id?._id?.toString() || registration.judge_id?.toString(),
+      judgePopulated: !!registration.judge_id?.user_id,
+      judgeUserIdFromRef: judgeUserId,
+      tournamentId: registration.tournament_id?._id?.toString(),
+      organizerId: registration.tournament_id?.organizer_id?._id?.toString() || registration.tournament_id?.organizer_id?.toString(),
+      authorizationResult: isPlayer || isCoach || isJudge || isAdmin || isOrganizer
     });
 
     if (!isPlayer && !isCoach && !isJudge && !isAdmin && !isOrganizer) {

@@ -71,7 +71,10 @@ const AdminPayments = () => {
     let filtered = registrations;
 
     if (selectedTournament !== 'all') {
-      filtered = filtered.filter(r => r.tournament_id === selectedTournament);
+      filtered = filtered.filter(r => {
+        const regTournamentId = r.tournament_id?._id || r.tournament_id;
+        return regTournamentId === selectedTournament || regTournamentId?.toString() === selectedTournament;
+      });
     }
 
     if (filterPayment !== 'all') {
@@ -85,9 +88,26 @@ const AdminPayments = () => {
     return filteredRegistrations
       .filter(r => r.payment_status === 'Paid')
       .reduce((sum, r) => {
-        const tournament = tournaments.find(t => t._id === r.tournament_id);
+        const tournament = tournaments.find(t => {
+          const regTournamentId = r.tournament_id?._id || r.tournament_id;
+          return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
+        });
         if (tournament) {
-          return sum + (r.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual);
+          // Check if registration has category with fees
+          const category = r.category_id;
+          if (category) {
+            if (r.registration_type === 'Team' && category.team_event_fee) {
+              return sum + category.team_event_fee;
+            } else if (r.registration_type === 'Individual' && category.individual_player_fee) {
+              return sum + category.individual_player_fee;
+            }
+          }
+          // Fallback to tournament-level fees if category fees not available
+          if (r.registration_type === 'Team' && tournament.entry_fee_team) {
+            return sum + tournament.entry_fee_team;
+          } else if (r.registration_type === 'Individual' && tournament.entry_fee_individual) {
+            return sum + tournament.entry_fee_individual;
+          }
         }
         return sum;
       }, 0);
@@ -98,13 +118,34 @@ const AdminPayments = () => {
     filteredRegistrations
       .filter(r => r.payment_status === 'Paid')
       .forEach(r => {
-        const tournament = tournaments.find(t => t._id === r.tournament_id);
+        const tournament = tournaments.find(t => {
+          const regTournamentId = r.tournament_id?._id || r.tournament_id;
+          return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
+        });
         if (tournament) {
           const name = tournament.tournament_name;
           if (!tournamentRevenue[name]) {
             tournamentRevenue[name] = 0;
           }
-          tournamentRevenue[name] += r.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual;
+          // Check if registration has category with fees
+          const category = r.category_id;
+          let amount = 0;
+          if (category) {
+            if (r.registration_type === 'Team' && category.team_event_fee) {
+              amount = category.team_event_fee;
+            } else if (r.registration_type === 'Individual' && category.individual_player_fee) {
+              amount = category.individual_player_fee;
+            }
+          }
+          // Fallback to tournament-level fees if category fees not available
+          if (amount === 0) {
+            if (r.registration_type === 'Team' && tournament.entry_fee_team) {
+              amount = tournament.entry_fee_team;
+            } else if (r.registration_type === 'Individual' && tournament.entry_fee_individual) {
+              amount = tournament.entry_fee_individual;
+            }
+          }
+          tournamentRevenue[name] += amount;
         }
       });
 
@@ -128,10 +169,30 @@ const AdminPayments = () => {
     filteredRegistrations
       .filter(r => r.payment_status === 'Paid')
       .forEach(reg => {
-        const tournament = tournaments.find(t => t._id === reg.tournament_id);
+        const tournament = tournaments.find(t => {
+          const regTournamentId = reg.tournament_id?._id || reg.tournament_id;
+          return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
+        });
         if (tournament) {
           const month = new Date(reg.registration_date || new Date()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-          const amount = reg.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual;
+          // Check if registration has category with fees
+          const category = reg.category_id;
+          let amount = 0;
+          if (category) {
+            if (reg.registration_type === 'Team' && category.team_event_fee) {
+              amount = category.team_event_fee;
+            } else if (reg.registration_type === 'Individual' && category.individual_player_fee) {
+              amount = category.individual_player_fee;
+            }
+          }
+          // Fallback to tournament-level fees if category fees not available
+          if (amount === 0) {
+            if (reg.registration_type === 'Team' && tournament.entry_fee_team) {
+              amount = tournament.entry_fee_team;
+            } else if (reg.registration_type === 'Individual' && tournament.entry_fee_individual) {
+              amount = tournament.entry_fee_individual;
+            }
+          }
           monthlyRevenue[month] = (monthlyRevenue[month] || 0) + amount;
         }
       });
@@ -315,19 +376,37 @@ const AdminPayments = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredRegistrations.map((registration) => {
-                    const tournament = tournaments.find(t => t._id === registration.tournament_id);
+                    const tournament = tournaments.find(t => {
+                      const regTournamentId = registration.tournament_id?._id || registration.tournament_id;
+                      return t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString();
+                    });
                     const participantName = registration.player_id?.user_id?.username ||
                                           registration.player_id?.user_id?.first_name ||
                                           registration.team_id?.team_name ||
                                           'N/A';
-                    const amount = tournament
-                      ? (registration.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual)
-                      : 0;
+                    // Calculate amount: check category fees first, then tournament fees
+                    let amount = 0;
+                    const category = registration.category_id;
+                    if (category) {
+                      if (registration.registration_type === 'Team' && category.team_event_fee) {
+                        amount = category.team_event_fee;
+                      } else if (registration.registration_type === 'Individual' && category.individual_player_fee) {
+                        amount = category.individual_player_fee;
+                      }
+                    }
+                    // Fallback to tournament-level fees if category fees not available
+                    if (amount === 0 && tournament) {
+                      if (registration.registration_type === 'Team' && tournament.entry_fee_team) {
+                        amount = tournament.entry_fee_team;
+                      } else if (registration.registration_type === 'Individual' && tournament.entry_fee_individual) {
+                        amount = tournament.entry_fee_individual;
+                      }
+                    }
 
                     return (
                       <tr key={registration._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 font-semibold text-gray-800">
-                          {tournament?.tournament_name || 'N/A'}
+                          {tournament?.tournament_name || registration.tournament_id?.tournament_name || 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-gray-700">{participantName}</td>
                         <td className="px-6 py-4">

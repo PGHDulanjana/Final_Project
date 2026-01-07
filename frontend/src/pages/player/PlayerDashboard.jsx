@@ -7,11 +7,14 @@ import { matchService } from '../../services/matchService';
 import { scoreService } from '../../services/scoreService';
 import { notificationService } from '../../services/notificationService';
 import { playerService } from '../../services/playerService';
+import { categoryService } from '../../services/categoryService';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import Layout from '../../components/Layout';
 import LiveScoreboard from '../../components/LiveScoreboard';
 import TournamentDetailModal from '../../components/TournamentDetailModal';
+import ChatbotPopup from '../../components/ChatbotPopup';
+import MatchDrawsBracket from '../../components/MatchDrawsBracket';
 import {
   FiCalendar,
   FiClock,
@@ -37,6 +40,7 @@ const PlayerDashboard = () => {
   const [tournaments, setTournaments] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [scores, setScores] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [playerMatches, setPlayerMatches] = useState([]);
@@ -60,6 +64,21 @@ const PlayerDashboard = () => {
     }
   }, [user]);
 
+  // Auto-refresh match draws when on match draws tab
+  useEffect(() => {
+    if (activeTab === 'matches' && user) {
+      // Refresh data every 30 seconds when on match draws tab
+      const interval = setInterval(() => {
+        if (user?._id) {
+          loadData();
+        }
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user]);
+
   const loadData = async () => {
     if (!user?._id) return;
     
@@ -80,10 +99,11 @@ const PlayerDashboard = () => {
         console.error('Error loading player profile:', error);
       }
       
-      const [tournamentsRes, registrationsRes, matchesRes, scoresRes, notificationsRes] = await Promise.all([
+      const [tournamentsRes, registrationsRes, matchesRes, categoriesRes, scoresRes, notificationsRes] = await Promise.all([
         tournamentService.getTournaments(),
         registrationService.getRegistrations(),
         matchService.getMatches(),
+        categoryService.getCategories(),
         scoreService.getScores(),
         notificationService.getNotifications({ user_id: user._id, unread_only: true })
       ]);
@@ -97,6 +117,7 @@ const PlayerDashboard = () => {
       
       setRegistrations(allRegistrations);
       setMatches(matchesRes.data || []);
+      setCategories(categoriesRes.data || []);
       setScores(scoresRes.data || []);
       setNotifications(notificationsRes.data || []);
 
@@ -261,7 +282,7 @@ const PlayerDashboard = () => {
             <div className="flex space-x-2 border-b border-gray-200 overflow-x-auto">
               {[
                 { id: 'events', label: 'My Events', icon: FiAward },
-                { id: 'matches', label: 'My Matches', icon: FiCalendar },
+                { id: 'matches', label: 'Match Draws', icon: FiTarget },
                 { id: 'results', label: 'My Results', icon: FiTarget },
                 { id: 'performance', label: 'Performance', icon: FiTrendingUp },
                 { id: 'notifications', label: 'Notifications', icon: FiBell }
@@ -523,25 +544,117 @@ const PlayerDashboard = () => {
             </div>
           )}
 
-          {/* Matches Tab */}
-          {activeTab === 'matches' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">My Matches</h2>
-              {playerMatches.length === 0 ? (
-                <div className="text-center py-12">
-                  <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">No Matches Yet</h3>
-                  <p className="text-gray-600">You don't have any matches scheduled</p>
+          {/* Match Draws Tab */}
+          {activeTab === 'matches' && (() => {
+            // Get player's registered events (categories)
+            const playerRegisteredEvents = registrations
+              .filter(r => {
+                const regPlayerId = r.player_id?._id || r.player_id;
+                const playerId = playerProfile?._id;
+                return (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                       r.registration_type === 'Individual' &&
+                       r.approval_status === 'Approved' &&
+                       r.payment_status === 'Paid';
+              })
+              .map(r => r.category_id?._id || r.category_id)
+              .filter(Boolean);
+
+            // Get categories for registered events
+            const registeredCategories = categories.filter(c => 
+              playerRegisteredEvents.some(eventId => 
+                c._id?.toString() === eventId?.toString() || c._id === eventId
+              )
+            );
+
+            // Group matches by category
+            const matchesByCategory = {};
+            registeredCategories.forEach(category => {
+              const categoryMatches = matches.filter(m => {
+                const matchCategoryId = m.category_id?._id || m.category_id;
+                return matchCategoryId?.toString() === category._id?.toString() || matchCategoryId === category._id;
+              });
+              if (categoryMatches.length > 0) {
+                matchesByCategory[category._id] = {
+                  category,
+                  matches: categoryMatches
+                };
+              }
+            });
+
+            const hasMatchDraws = Object.keys(matchesByCategory).length > 0;
+
+            return (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">Match Draws</h2>
+                    <p className="text-gray-600">
+                      View match draws for events you are registered for
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => loadData()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                  >
+                    <FiTarget className="w-4 h-4" />
+                    Refresh
+                  </button>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {playerMatches.map((match) => (
-                    <DetailedMatchCard key={match._id} match={match} user={user} />
-                  ))}
-                </div>
+
+                {registeredCategories.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Registered Events</h3>
+                    <p className="text-gray-600 mb-4">You need to register and get approved for events to see match draws</p>
+                    <button
+                      onClick={() => setActiveTab('events')}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      View My Events
+                    </button>
+                  </div>
+                ) : !hasMatchDraws ? (
+                  <div className="text-center py-12">
+                    <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Match Draws Yet</h3>
+                    <p className="text-gray-600">Match draws will appear here once the organizer creates them for your registered events</p>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {Object.values(matchesByCategory).map(({ category, matches: categoryMatches }) => {
+                      const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
+                      const isKumite = category.category_type === 'Kumite' || category.category_type === 'Team Kumite';
+                      
+                      return (
+                        <div key={category._id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-xl font-bold text-gray-800">{category.category_name}</h3>
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                isKata ? 'bg-blue-100 text-blue-700' :
+                                isKumite ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {category.category_type}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              {category.participation_type} • {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
+                            </p>
+                          </div>
+                          
+                          <MatchDrawsBracket 
+                            matches={categoryMatches} 
+                            category={category}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-          )}
+            );
+          })()}
 
           {/* Results Tab */}
           {activeTab === 'results' && (
@@ -592,6 +705,9 @@ const PlayerDashboard = () => {
           onClose={() => setSelectedTournamentId(null)}
         />
       )}
+
+      {/* Chatbot Popup */}
+      <ChatbotPopup />
     </Layout>
   );
 };

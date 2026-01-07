@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { categoryService } from '../../services/categoryService';
 import { tournamentService } from '../../services/tournamentService';
 import { matchService } from '../../services/matchService';
+import { tatamiService } from '../../services/tatamiService';
+import { judgeService } from '../../services/judgeService';
+import { registrationService } from '../../services/registrationService';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import Layout from '../../components/Layout';
-import { FiPlus, FiEdit, FiTrash2, FiX, FiDollarSign } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiX, FiDollarSign, FiUsers, FiSettings, FiExternalLink } from 'react-icons/fi';
 import { KUMITE_CLASSES, getWeightClasses, getAgeCategories } from '../../utils/kumiteClasses';
 
 const CategoryManagement = () => {
@@ -15,10 +18,20 @@ const CategoryManagement = () => {
   const [tournaments, setTournaments] = useState([]);
   const [categories, setCategories] = useState([]);
   const [matches, setMatches] = useState([]);
+  const [tatamis, setTatamis] = useState([]);
+  const [judges, setJudges] = useState([]);
   const [selectedTournament, setSelectedTournament] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showTatamiModal, setShowTatamiModal] = useState(false);
+  const [selectedCategoryForTatami, setSelectedCategoryForTatami] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tatamiFormData, setTatamiFormData] = useState({
+    tatami_number: 1,
+    tatami_name: '',
+    location: '',
+    assigned_judges: []
+  });
   const [formData, setFormData] = useState({
     tournament_id: '',
     category_name: '',
@@ -87,15 +100,124 @@ const CategoryManagement = () => {
     if (!selectedTournament) return;
 
     try {
-      const [categoriesRes, matchesRes] = await Promise.all([
+      const [categoriesRes, matchesRes, tatamisRes, judgesRes] = await Promise.all([
         categoryService.getCategories({ tournament_id: selectedTournament }),
-        matchService.getMatches({ tournament_id: selectedTournament })
+        matchService.getMatches({ tournament_id: selectedTournament }),
+        tatamiService.getTatamis({ tournament_id: selectedTournament }),
+        judgeService.getJudges()
       ]);
       setCategories(categoriesRes.data || []);
       setMatches(matchesRes.data || []);
+      setTatamis(tatamisRes.data || []);
+      // Filter judges to only show those registered for this tournament
+      const allJudges = judgesRes.data || [];
+      // Get registrations to filter judges
+      const registrationsRes = await registrationService.getRegistrations({ 
+        tournament_id: selectedTournament,
+        registration_type: 'Judge'
+      });
+      const judgeRegistrations = registrationsRes.data || [];
+      const registeredJudgeIds = new Set(
+        judgeRegistrations.map(reg => String(reg.judge_id?._id || reg.judge_id))
+      );
+      const filteredJudges = allJudges.filter(judge => 
+        registeredJudgeIds.has(String(judge._id))
+      );
+      setJudges(filteredJudges);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load events and matches');
+    }
+  };
+
+  const handleOpenTatamiModal = (category) => {
+    setSelectedCategoryForTatami(category);
+    
+    // Check if tatami already exists for this category
+    const existingTatami = tatamis.find(t => 
+      String(t.category_id?._id || t.category_id) === String(category._id)
+    );
+
+    if (existingTatami) {
+      setTatamiFormData({
+        tatami_number: existingTatami.tatami_number,
+        tatami_name: existingTatami.tatami_name || '',
+        location: existingTatami.location || '',
+        assigned_judges: existingTatami.assigned_judges || []
+      });
+    } else {
+      // Get next available tatami number
+      const maxTatamiNumber = tatamis.length > 0 
+        ? Math.max(...tatamis.map(t => t.tatami_number || 0))
+        : 0;
+      
+      setTatamiFormData({
+        tatami_number: maxTatamiNumber + 1,
+        tatami_name: `Tatami ${maxTatamiNumber + 1}`,
+        location: `Area ${maxTatamiNumber + 1}`,
+        assigned_judges: []
+      });
+    }
+    
+    setShowTatamiModal(true);
+  };
+
+  const handleCreateOrUpdateTatami = async () => {
+    if (!selectedCategoryForTatami || !selectedTournament) return;
+
+    try {
+      // Check if tatami already exists
+      const existingTatami = tatamis.find(t => 
+        String(t.category_id?._id || t.category_id) === String(selectedCategoryForTatami._id)
+      );
+
+      if (existingTatami) {
+        // Update existing tatami
+        await tatamiService.updateTatami(existingTatami._id, {
+          tatami_number: tatamiFormData.tatami_number,
+          tatami_name: tatamiFormData.tatami_name,
+          location: tatamiFormData.location
+        });
+
+        // Update judges if provided
+        if (tatamiFormData.assigned_judges.length > 0) {
+          await tatamiService.assignJudges(existingTatami._id, tatamiFormData.assigned_judges);
+        }
+
+        toast.success('Tatami updated successfully');
+      } else {
+        // Create new tatami
+        const response = await tatamiService.createTatami({
+          tournament_id: selectedTournament,
+          category_id: selectedCategoryForTatami._id,
+          tatami_number: tatamiFormData.tatami_number,
+          tatami_name: tatamiFormData.tatami_name,
+          location: tatamiFormData.location,
+          assigned_judges: tatamiFormData.assigned_judges
+        });
+
+        if (response.success) {
+          toast.success('Tatami created and event assigned successfully');
+        }
+      }
+
+      setShowTatamiModal(false);
+      await loadCategories();
+    } catch (error) {
+      console.error('Error creating/updating tatami:', error);
+      toast.error(error.response?.data?.message || 'Failed to setup tatami');
+    }
+  };
+
+  const handleGoToTatami = (category) => {
+    const tatami = tatamis.find(t => 
+      String(t.category_id?._id || t.category_id) === String(category._id)
+    );
+    
+    if (tatami) {
+      navigate(`/tatami/${tatami._id}`);
+    } else {
+      toast.error('Tatami not set up for this event. Please setup tatami first.');
     }
   };
 
@@ -432,8 +554,11 @@ const CategoryManagement = () => {
                 <OrganizedEventsView 
                   categories={filteredCategories}
                   matches={matches}
+                  tatamis={tatamis}
                   onEdit={handleOpenModal}
                   onDelete={handleDelete}
+                  onSetupTatami={handleOpenTatamiModal}
+                  onGoToTatami={handleGoToTatami}
                 />
               )}
             </div>
@@ -1126,12 +1251,212 @@ const CategoryManagement = () => {
           </div>
         </div>
       )}
+
+      {/* Tatami Setup Modal */}
+      {showTatamiModal && selectedCategoryForTatami && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-800">
+                Setup Tatami for {selectedCategoryForTatami.category_name}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowTatamiModal(false);
+                  setSelectedCategoryForTatami(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <FiX className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreateOrUpdateTatami();
+              }}
+              className="p-6 space-y-6"
+            >
+              {/* Tatami Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tatami Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={tatamiFormData.tatami_number}
+                    onChange={(e) => setTatamiFormData({ ...tatamiFormData, tatami_number: parseInt(e.target.value) || 1 })}
+                    required
+                    min="1"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tatami Name
+                  </label>
+                  <input
+                    type="text"
+                    value={tatamiFormData.tatami_name}
+                    onChange={(e) => setTatamiFormData({ ...tatamiFormData, tatami_name: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Tatami 1, Main Arena"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={tatamiFormData.location}
+                    onChange={(e) => setTatamiFormData({ ...tatamiFormData, location: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Area A, Main Hall"
+                  />
+                </div>
+              </div>
+
+              {/* Judge Assignment */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Assign Judges to Event (Select up to 5 judges)
+                </label>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> Judges assigned here will automatically judge <strong>all matches</strong> in this event. 
+                    They are assigned to the event, not individual matches.
+                  </p>
+                </div>
+                <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto">
+                  {judges.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No judges registered for this tournament</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {judges.map((judge) => {
+                        const user = judge.user_id;
+                        const name = user?.first_name && user?.last_name
+                          ? `${user.first_name} ${user.last_name}`
+                          : user?.username || 'Unknown Judge';
+                        
+                        const isSelected = tatamiFormData.assigned_judges.some(
+                          j => String(j.judge_id) === String(judge._id)
+                        );
+                        const selectedJudge = tatamiFormData.assigned_judges.find(
+                          j => String(j.judge_id) === String(judge._id)
+                        );
+
+                        return (
+                          <div
+                            key={judge._id}
+                            className={`border-2 rounded-lg p-3 ${
+                              isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      if (tatamiFormData.assigned_judges.length >= 5) {
+                                        toast.error('Maximum 5 judges can be assigned to an event');
+                                        return;
+                                      }
+                                      setTatamiFormData({
+                                        ...tatamiFormData,
+                                        assigned_judges: [
+                                          ...tatamiFormData.assigned_judges,
+                                          { judge_id: judge._id, judge_role: 'Judge' }
+                                        ]
+                                      });
+                                    } else {
+                                      setTatamiFormData({
+                                        ...tatamiFormData,
+                                        assigned_judges: tatamiFormData.assigned_judges.filter(
+                                          j => String(j.judge_id) !== String(judge._id)
+                                        )
+                                      });
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-blue-600"
+                                  disabled={!isSelected && tatamiFormData.assigned_judges.length >= 5}
+                                />
+                                <div>
+                                  <p className="font-semibold text-gray-800">{name}</p>
+                                  <p className="text-xs text-gray-600">
+                                    {judge.certification_level} • {judge.specialization?.join(', ') || 'General'}
+                                  </p>
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <select
+                                  value={selectedJudge?.judge_role || 'Judge'}
+                                  onChange={(e) => {
+                                    setTatamiFormData({
+                                      ...tatamiFormData,
+                                      assigned_judges: tatamiFormData.assigned_judges.map(j =>
+                                        String(j.judge_id) === String(judge._id)
+                                          ? { ...j, judge_role: e.target.value }
+                                          : j
+                                      )
+                                    });
+                                  }}
+                                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="Judge">Judge</option>
+                                  <option value="Head Judge">Head Judge</option>
+                                  <option value="Referee">Referee</option>
+                                  <option value="Timekeeper">Timekeeper</option>
+                                  <option value="Scorekeeper">Scorekeeper</option>
+                                </select>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Selected: {tatamiFormData.assigned_judges.length}/5 judge(s). These judges will automatically be assigned to all matches in this event. Judges will need to confirm their assignment before accessing the tatami dashboard.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTatamiModal(false);
+                    setSelectedCategoryForTatami(null);
+                  }}
+                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition font-medium"
+                >
+                  {tatamis.find(t => String(t.category_id?._id || t.category_id) === String(selectedCategoryForTatami._id))
+                    ? 'Update Tatami'
+                    : 'Create Tatami & Assign Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
 
 // Organized Events View Component - Groups events by Type and Gender
-const OrganizedEventsView = ({ categories, matches, onEdit, onDelete }) => {
+const OrganizedEventsView = ({ categories, matches, tatamis, onEdit, onDelete, onSetupTatami, onGoToTatami }) => {
   // Organize categories by event type and gender
   const organizedEvents = {
     'Kata': {
@@ -1292,13 +1617,20 @@ const OrganizedEventsView = ({ categories, matches, onEdit, onDelete }) => {
                           return matchCategoryId === category._id || matchCategoryId?.toString() === category._id?.toString();
                         });
                         
+                        const tatami = tatamis?.find(t => 
+                          String(t.category_id?._id || t.category_id) === String(category._id)
+                        );
+                        
                         return (
                           <EventCard
                             key={category._id}
                             category={category}
                             eventMatches={eventMatches}
+                            tatami={tatami}
                             onEdit={onEdit}
                             onDelete={onDelete}
+                            onSetupTatami={onSetupTatami}
+                            onGoToTatami={onGoToTatami}
                           />
                         );
                       })}
@@ -1315,7 +1647,7 @@ const OrganizedEventsView = ({ categories, matches, onEdit, onDelete }) => {
 };
 
 // Event Card Component
-const EventCard = ({ category, eventMatches, onEdit, onDelete }) => {
+const EventCard = ({ category, eventMatches, tatami, onEdit, onDelete, onSetupTatami, onGoToTatami }) => {
   return (
     <div className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition bg-white">
       <div className="flex items-start justify-between mb-3">
@@ -1323,6 +1655,11 @@ const EventCard = ({ category, eventMatches, onEdit, onDelete }) => {
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <h3 className="font-bold text-lg text-gray-800">{category.category_name}</h3>
             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Event</span>
+            {tatami && (
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-semibold">
+                Tatami {tatami.tatami_number}
+              </span>
+            )}
             {category.is_open_event && (
               <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-semibold">Open</span>
             )}
@@ -1384,6 +1721,23 @@ const EventCard = ({ category, eventMatches, onEdit, onDelete }) => {
           </div>
         </div>
         <div className="flex flex-col gap-2 ml-4">
+          {tatami ? (
+            <button
+              onClick={() => onGoToTatami(category)}
+              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+              title="Go to Tatami Dashboard"
+            >
+              <FiExternalLink className="w-5 h-5" />
+            </button>
+          ) : (
+            <button
+              onClick={() => onSetupTatami(category)}
+              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition"
+              title="Setup Tatami"
+            >
+              <FiSettings className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={() => onEdit(category)}
             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"

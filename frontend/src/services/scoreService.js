@@ -36,5 +36,11 @@ export const scoreService = {
     const response = await api.delete(`/scores/${id}`);
     return response.data;
   },
+
+  // Get scores for a match
+  getMatchScores: async (matchId) => {
+    const response = await api.get('/scores', { params: { match_id: matchId } });
+    return response.data;
+  },
 };
 

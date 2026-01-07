@@ -3,7 +3,6 @@ import { categoryService } from "../../services/categoryService";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { playerService } from "../../services/playerService";
-import { teamService } from "../../services/teamService";
 import { dojoService } from "../../services/dojoService";
 import { coachService } from "../../services/coachService";
 import { tournamentService } from "../../services/tournamentService";
@@ -11,6 +10,7 @@ import { registrationService } from "../../services/registrationService";
 import { matchService } from "../../services/matchService";
 import { scoreService } from "../../services/scoreService";
 import { paymentService } from "../../services/paymentService";
+import kataPerformanceService from "../../services/kataPerformanceService";
 
 // PayHere helpers moved inline (frontend utils removed)
 const extractCustomerInfoLocal = (data) => {
@@ -117,10 +117,10 @@ import { notificationService } from "../../services/notificationService";
 import { toast } from "react-toastify";
 import { format } from "date-fns";
 import Layout from "../../components/Layout";
-import LiveScoreboard from "../../components/LiveScoreboard";
 import MatchDrawsBracket from "../../components/MatchDrawsBracket";
 import TournamentDetailModal from "../../components/TournamentDetailModal";
 import PlayerDetailsModal from "../../components/PlayerDetailsModal";
+import ChatbotPopup from "../../components/ChatbotPopup";
 import PayHerePaymentModal from "../../components/PayHerePaymentModal";
 import {
   FiUsers,
@@ -148,6 +148,7 @@ import {
   FiEye,
   FiMapPin,
   FiRefreshCw,
+  FiTrendingUp,
 } from "react-icons/fi";
 
 const CoachDashboard = () => {
@@ -158,7 +159,6 @@ const CoachDashboard = () => {
 
   // Data states
   const [players, setPlayers] = useState([]);
-  const [teams, setTeams] = useState([]);
   const [tournaments, setTournaments] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -166,6 +166,7 @@ const CoachDashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [payments, setPayments] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [kataPerformances, setKataPerformances] = useState([]);
   const [coachDojos, setCoachDojos] = useState([]);
   const [coachDojosData, setCoachDojosData] = useState([]);
   const [coachProfile, setCoachProfile] = useState(null); // Full dojo objects
@@ -187,14 +188,11 @@ const CoachDashboard = () => {
   });
 
   // UI states
-  const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [showRegisterPlayer, setShowRegisterPlayer] = useState(false);
-  const [showRegisterTeam, setShowRegisterTeam] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState(null);
   const [pendingCategory, setPendingCategory] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
-  const [selectedTeam, setSelectedTeam] = useState(null);
   const [selectedTournament, setSelectedTournament] = useState(null);
   const [selectedRegistration, setSelectedRegistration] = useState(null);
   const [playerDetailsForm, setPlayerDetailsForm] = useState({
@@ -206,16 +204,10 @@ const CoachDashboard = () => {
   });
   const [showPlayerDetailsModal, setShowPlayerDetailsModal] = useState(false);
   const [draggedPlayer, setDraggedPlayer] = useState(null);
-  const [teamForm, setTeamForm] = useState({
-    team_name: "",
-    team_type: "Team Kata",
-    description: "",
-  });
   const [registrationForm, setRegistrationForm] = useState({
     tournament_id: "",
     category_id: "",
     player_id: "",
-    team_id: "",
     registration_type: "Individual",
     event_type: "Kata",
   });
@@ -270,7 +262,6 @@ const CoachDashboard = () => {
     try {
       const [
         playersRes,
-        teamsRes,
         tournamentsRes,
         registrationsRes,
         matchesRes,
@@ -281,7 +272,6 @@ const CoachDashboard = () => {
         dojosRes,
       ] = await Promise.all([
         playerService.getPlayers(),
-        teamService.getTeams(),
         tournamentService.getTournaments(), // Fetch all tournaments, filter on frontend
         registrationService.getRegistrations(),
         matchService.getMatches(),
@@ -812,28 +802,15 @@ const CoachDashboard = () => {
         setPlayers(uniquePlayers);
       }
 
-      // Filter teams by coach
-      const coachTeams = (teamsRes.data || []).filter((t) => {
-        const coachId = t.coach_id?._id || t.coach_id;
-        return coachId === user?.coach_id || coachId === user?._id;
-      });
-
       // Get ALL registrations (including coach registrations for tournaments)
       // We need all registrations to filter tournaments in PlayerDetailsModal
       const allRegistrations = registrationsRes.data || [];
 
-      // Filter registrations by coach's players/teams (for display in registrations tab)
+      // Filter registrations by coach's players (for display in registrations tab)
       const coachRegistrations = allRegistrations.filter((r) => {
         const regPlayerId = r.player_id?._id || r.player_id;
-        const regTeamId = r.team_id?._id || r.team_id;
-        return (
-          coachPlayers.some((p) => p._id === regPlayerId) ||
-          coachTeams.some((t) => t._id === regTeamId)
-        );
+        return coachPlayers.some((p) => p._id === regPlayerId);
       });
-
-      // Players are already set above with fallback logic
-      setTeams(coachTeams);
 
       // Filter tournaments to show only Open or Ongoing (for display in tournaments tab)
       // This ensures newly created tournaments are visible even if they have different initial status
@@ -862,7 +839,42 @@ const CoachDashboard = () => {
       setScores(scoresRes.data || []);
       setNotifications(notificationsRes.data || []);
       setPayments(paymentsRes.data || []);
-      setCategories(categoriesRes.data || []);
+      const allCategories = categoriesRes.data || [];
+      setCategories(allCategories);
+
+      // Load Kata performances for Kata events
+      const kataCategories = allCategories.filter(c => 
+        c.category_type === 'Kata' || c.category_type === 'Team Kata'
+      );
+      
+      if (kataCategories.length > 0) {
+        try {
+          const kataPromises = kataCategories.map(c => 
+            kataPerformanceService.getPerformances({ category_id: c._id })
+              .catch((err) => {
+                console.error(`Error loading performances for category ${c._id}:`, err);
+                return { data: [] };
+              })
+          );
+          const kataResults = await Promise.all(kataPromises);
+          // kataPerformanceService.getPerformances returns response.data which is { success: true, count: X, data: [...] }
+          const allKataPerformances = kataResults.flatMap(res => {
+            if (res && res.data && Array.isArray(res.data)) {
+              return res.data;
+            }
+            if (Array.isArray(res)) {
+              return res;
+            }
+            return [];
+          });
+          setKataPerformances(allKataPerformances);
+        } catch (error) {
+          console.error('Error loading Kata performances:', error);
+          setKataPerformances([]);
+        }
+      } else {
+        setKataPerformances([]);
+      }
     } catch (error) {
       console.error("Error loading dashboard data:", error);
       toast.error("Failed to load dashboard data");
@@ -873,7 +885,6 @@ const CoachDashboard = () => {
 
   // Calculate statistics
   const totalPlayers = players.length;
-  const totalTeams = teams.length;
   const totalRegistrations = registrations.length;
   const pendingRegistrations = registrations.filter(
     (r) => r.approval_status === "Pending"
@@ -885,16 +896,14 @@ const CoachDashboard = () => {
     const matchParticipants = m.participants || [];
     return matchParticipants.some(
       (p) =>
-        players.some((pl) => pl._id === (p.player_id?._id || p.player_id)) ||
-        teams.some((t) => t._id === (p.team_id?._id || p.team_id))
+        players.some((pl) => pl._id === (p.player_id?._id || p.player_id))
     );
   }).length;
   const upcomingMatches = matches.filter((m) => {
     const matchParticipants = m.participants || [];
     const isCoachMatch = matchParticipants.some(
       (p) =>
-        players.some((pl) => pl._id === (p.player_id?._id || p.player_id)) ||
-        teams.some((t) => t._id === (p.team_id?._id || p.team_id))
+        players.some((pl) => pl._id === (p.player_id?._id || p.player_id))
     );
     return (
       isCoachMatch &&
@@ -906,22 +915,6 @@ const CoachDashboard = () => {
     .filter((p) => p.status === "Completed")
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-  const handleCreateTeam = async (e) => {
-    e.preventDefault();
-    try {
-      await teamService.createTeam({
-        ...teamForm,
-        coach_id: user?.coach_id || user?._id,
-      });
-      toast.success("Team created successfully!");
-      setShowCreateTeam(false);
-      setTeamForm({ team_name: "", team_type: "Team Kata", description: "" });
-      loadData();
-    } catch (error) {
-      console.error("Error creating team:", error);
-      toast.error(error.response?.data?.message || "Failed to create team");
-    }
-  };
 
   const handleRegisterPlayer = async (e) => {
     e.preventDefault();
@@ -1010,7 +1003,6 @@ const CoachDashboard = () => {
           tournament_id: "",
           category_id: "",
           player_id: "",
-          team_id: "",
           registration_type: "Individual",
           event_type: "Kata",
         });
@@ -1078,36 +1070,6 @@ const CoachDashboard = () => {
     }
   };
 
-  const handleRegisterTeam = async (e) => {
-    e.preventDefault();
-    if (!registrationForm.category_id) {
-      toast.error("Please select an event");
-      return;
-    }
-    try {
-      await registrationService.registerForTournament({
-        tournament_id: registrationForm.tournament_id,
-        category_id: registrationForm.category_id,
-        team_id: registrationForm.team_id,
-        registration_type: "Team",
-        coach_id: user?.coach_id || user?._id,
-      });
-      toast.success("Team registered successfully!");
-      setShowRegisterTeam(false);
-      setRegistrationForm({
-        tournament_id: "",
-        category_id: "",
-        player_id: "",
-        team_id: "",
-        registration_type: "Team",
-        event_type: "Team Kata",
-      });
-      loadData();
-    } catch (error) {
-      console.error("Error registering team:", error);
-      toast.error(error.response?.data?.message || "Failed to register team");
-    }
-  };
 
   const handleMakePayment = async (registrationId) => {
     try {
@@ -1224,11 +1186,11 @@ const CoachDashboard = () => {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setShowCreateTeam(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    onClick={() => setActiveTab("players")}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                   >
-                    <FiPlus className="w-5 h-5" />
-                    Create Team
+                    <FiUserPlus className="w-5 h-5" />
+                    Manage Players
                   </button>
                 </div>
               </div>
@@ -1239,16 +1201,14 @@ const CoachDashboard = () => {
                   { id: "overview", label: "Overview", icon: FiBarChart2 },
                   { id: "dojos", label: "My Dojos", icon: FiMapPin },
                   { id: "players", label: "Players", icon: FiUsers },
-                  { id: "teams", label: "Teams", icon: FiUser },
                   {
                     id: "registrations",
                     label: "Registrations",
                     icon: FiCheckCircle,
                   },
                   { id: "tournaments", label: "Tournaments", icon: FiAward },
-                  { id: "brackets", label: "Brackets", icon: FiTarget },
-                  { id: "matches", label: "Matches", icon: FiCalendar },
-                  { id: "results", label: "Results", icon: FiGift },
+                  { id: "kata-player-lists", label: "Kata Player Lists", icon: FiTarget },
+                  { id: "kumite-match-draws", label: "Kumite Match Draws", icon: FiTarget },
                   { id: "notifications", label: "Notifications", icon: FiBell },
                 ].map((tab) => {
                   const Icon = tab.icon;
@@ -1291,21 +1251,6 @@ const CoachDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-gray-500 text-sm font-medium">
-                          Total Teams
-                        </p>
-                        <p className="text-3xl font-bold text-gray-800 mt-2">
-                          {totalTeams}
-                        </p>
-                      </div>
-                      <div className="p-3 bg-green-100 rounded-lg">
-                        <FiUser className="w-8 h-8 text-green-600" />
-                      </div>
-                    </div>
-                  </div>
 
                   <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
                     <div className="flex items-center justify-between">
@@ -1350,15 +1295,6 @@ const CoachDashboard = () => {
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <button
-                      onClick={() => setShowCreateTeam(true)}
-                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-green-500 hover:bg-green-50 transition"
-                    >
-                      <FiPlus className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="font-semibold text-gray-700">
-                        Create Team
-                      </span>
-                    </button>
-                    <button
                       onClick={() => setActiveTab("players")}
                       className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition"
                     >
@@ -1368,12 +1304,21 @@ const CoachDashboard = () => {
                       </span>
                     </button>
                     <button
-                      onClick={() => setActiveTab("brackets")}
+                      onClick={() => setActiveTab("kata-player-lists")}
                       className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-cyan-500 hover:bg-cyan-50 transition"
                     >
                       <FiTarget className="w-8 h-8 text-gray-400 mb-2" />
                       <span className="font-semibold text-gray-700">
-                        View Brackets
+                        Kata Player Lists
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("kumite-match-draws")}
+                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition"
+                    >
+                      <FiTarget className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="font-semibold text-gray-700">
+                        Kumite Match Draws
                       </span>
                     </button>
                   </div>
@@ -1411,7 +1356,6 @@ const CoachDashboard = () => {
                             registration={registration}
                             tournaments={tournaments}
                             players={players}
-                            teams={teams}
                             onMakePayment={() =>
                               handleMakePayment(registration._id)
                             }
@@ -1550,43 +1494,6 @@ const CoachDashboard = () => {
                   )}
                 </div>
 
-                {/* My Teams */}
-                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold text-gray-800">
-                      My Teams
-                    </h2>
-                    <button
-                      onClick={() => setActiveTab("teams")}
-                      className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                    >
-                      View All <FiArrowRight />
-                    </button>
-                  </div>
-                  {teams.length === 0 ? (
-                    <div className="text-center py-12">
-                      <FiUser className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                        No Teams Yet
-                      </h3>
-                      <p className="text-gray-600 mb-4">
-                        Create teams for team events
-                      </p>
-                      <button
-                        onClick={() => setShowCreateTeam(true)}
-                        className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
-                      >
-                        Create Team
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {teams.slice(0, 6).map((team) => (
-                        <TeamCard key={team._id} team={team} />
-                      ))}
-                    </div>
-                  )}
-                </div>
 
                 {/* Upcoming Matches */}
                 {upcomingMatches > 0 && (
@@ -1611,9 +1518,6 @@ const CoachDashboard = () => {
                               players.some(
                                 (pl) =>
                                   pl._id === (p.player_id?._id || p.player_id)
-                              ) ||
-                              teams.some(
-                                (t) => t._id === (p.team_id?._id || p.team_id)
                               )
                           );
                           return (
@@ -2020,46 +1924,351 @@ const CoachDashboard = () => {
               </div>
             )}
 
-            {/* Teams Tab */}
-            {activeTab === "teams" && (
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800">
-                    Manage Teams
-                  </h2>
-                  <button
-                    onClick={() => setShowCreateTeam(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                  >
-                    <FiPlus className="w-5 h-5" />
-                    Create Team
-                  </button>
-                </div>
-                {teams.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FiUser className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                      No Teams
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      Create teams for team events
-                    </p>
+            {/* Kata Player Lists Tab */}
+            {activeTab === "kata-player-lists" && (() => {
+              // Get coach's players' registered Kata events
+              const coachPlayerRegistrations = registrations.filter(r => {
+                const regPlayerId = r.player_id?._id || r.player_id;
+                const isCoachPlayer = players.some(p => p._id === regPlayerId);
+                return isCoachPlayer &&
+                       r.registration_type === 'Individual' &&
+                       r.approval_status === 'Approved' &&
+                       r.payment_status === 'Paid';
+              });
+
+              const kataEventIds = coachPlayerRegistrations
+                .map(r => r.category_id?._id || r.category_id)
+                .filter(Boolean);
+
+              const kataCategories = categories.filter(c => 
+                (c.category_type === 'Kata' || c.category_type === 'Team Kata') &&
+                kataEventIds.some(eventId => 
+                  c._id?.toString() === eventId?.toString() || c._id === eventId
+                )
+              );
+
+              // Group Kata performances by category
+              const performancesByCategory = {};
+              kataCategories.forEach(category => {
+                const categoryPerformances = kataPerformances.filter(p => {
+                  const perfCategoryId = p.category_id?._id || p.category_id;
+                  return String(perfCategoryId) === String(category._id);
+                });
+                if (categoryPerformances.length > 0) {
+                  performancesByCategory[category._id] = {
+                    category,
+                    performances: categoryPerformances
+                  };
+                }
+              });
+
+              // Always include Kata categories even if no performances yet
+              kataCategories.forEach(category => {
+                if (!performancesByCategory[category._id]) {
+                  performancesByCategory[category._id] = {
+                    category,
+                    performances: []
+                  };
+                }
+              });
+
+              const hasKataEvents = Object.keys(performancesByCategory).length > 0;
+
+              return (
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">Kata Player Lists</h2>
+                      <p className="text-gray-600">View player lists and round progression for Kata events your players are registered for</p>
+                    </div>
                     <button
-                      onClick={() => setShowCreateTeam(true)}
-                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
+                      onClick={() => loadData()}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                     >
-                      Create Team
+                      <FiRefreshCw className="w-4 h-4" />
+                      Refresh
                     </button>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {teams.map((team) => (
-                      <TeamCard key={team._id} team={team} />
-                    ))}
+
+                  {!hasKataEvents ? (
+                    <div className="text-center py-12">
+                      <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">No Kata Events Registered</h3>
+                      <p className="text-gray-600">Your players need to register and get approved for Kata events to see player lists</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      {Object.values(performancesByCategory).map(({ category, performances: categoryPerformances }) => {
+                        // Group performances by round
+                        const performancesByRound = {};
+                        categoryPerformances.forEach(perf => {
+                          const round = perf.round || 'First Round';
+                          if (!performancesByRound[round]) {
+                            performancesByRound[round] = [];
+                          }
+                          performancesByRound[round].push(perf);
+                        });
+
+                        const rounds = ['First Round', 'Second Round (Final 8)', 'Third Round (Final 4)'];
+
+                        return (
+                          <div key={category._id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                            <div className="mb-6">
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-2xl font-bold text-gray-800">{category.category_name}</h3>
+                                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                                  {category.category_type}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600">
+                                {category.participation_type} • {Object.keys(performancesByRound).length} round{Object.keys(performancesByRound).length !== 1 ? 's' : ''} • {categoryPerformances.length} player{categoryPerformances.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+
+                            {categoryPerformances.length === 0 ? (
+                              <div className="text-center py-8 bg-white rounded-lg">
+                                <p className="text-gray-600">No rounds created yet. The organizer will create rounds for this event.</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-6">
+                                <div className="mb-4 pb-4 border-b border-gray-200">
+                                  <h4 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                                    <FiTrendingUp className="mr-2 text-blue-600" />
+                                    Kata Event - Round Progression
+                                  </h4>
+                                  <p className="text-sm text-gray-600">
+                                    View players who advanced through each round. Players are ranked by final score.
+                                  </p>
+                                </div>
+                                {rounds.map(round => {
+                                  const roundPerformances = performancesByRound[round] || [];
+                                  if (roundPerformances.length === 0) return null;
+
+                                  // Sort performances
+                                  const sortedPerformances = [...roundPerformances].sort((a, b) => {
+                                    if (round === 'Third Round (Final 4)') {
+                                      if (a.place !== null && b.place !== null) {
+                                        return a.place - b.place;
+                                      }
+                                      if (a.place !== null) return -1;
+                                      if (b.place !== null) return 1;
+                                    }
+                                    if (a.final_score === null && b.final_score === null) {
+                                      return (a.performance_order || 0) - (b.performance_order || 0);
+                                    }
+                                    if (a.final_score === null) return 1;
+                                    if (b.final_score === null) return -1;
+                                    if (b.final_score !== a.final_score) {
+                                      return b.final_score - a.final_score;
+                                    }
+                                    return (a.performance_order || 0) - (b.performance_order || 0);
+                                  });
+
+                                  return (
+                                    <div key={round} className="border border-gray-200 rounded-lg p-6 bg-white">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                          <FiAward className="w-5 h-5 text-blue-600" />
+                                          {round}
+                                        </h4>
+                                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                                          {roundPerformances.length} Player{roundPerformances.length !== 1 ? 's' : ''}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="space-y-2">
+                                        {sortedPerformances.map((performance, index) => {
+                                          const playerName = performance.player_id?.user_id
+                                            ? `${performance.player_id.user_id.first_name || ''} ${performance.player_id.user_id.last_name || ''}`.trim() || performance.player_id.user_id.username
+                                            : 'Player';
+                                          const isCoachPlayer = players.some(p => 
+                                            p._id?.toString() === performance.player_id?._id?.toString() ||
+                                            p._id === performance.player_id?._id
+                                          );
+                                          const scoresCount = performance.scores?.length || 0;
+                                          
+                                          return (
+                                            <div
+                                              key={performance._id}
+                                              className={`rounded-lg p-4 border-2 transition ${
+                                                isCoachPlayer
+                                                  ? 'bg-blue-50 border-blue-400 shadow-md'
+                                                  : 'bg-gray-50 border-gray-200'
+                                              }`}
+                                            >
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-4 flex-1">
+                                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                                                    isCoachPlayer
+                                                      ? 'bg-blue-600 text-white'
+                                                      : 'bg-gray-200 text-gray-700'
+                                                  }`}>
+                                                    {round === 'Third Round (Final 4)' && performance.place
+                                                      ? performance.place
+                                                      : index + 1}
+                                                  </div>
+                                                  <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                      <p className={`font-semibold ${
+                                                        isCoachPlayer ? 'text-blue-800' : 'text-gray-800'
+                                                      }`}>
+                                                        {playerName}
+                                                        {isCoachPlayer && (
+                                                          <span className="ml-2 text-xs text-blue-600">(Your Player)</span>
+                                                        )}
+                                                      </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 mt-1 text-xs text-gray-600">
+                                                      <span>Order: {performance.performance_order}</span>
+                                                      {scoresCount > 0 && (
+                                                        <span className="text-blue-600">
+                                                          {scoresCount}/5 judges scored
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right">
+                                                  {performance.final_score !== null ? (
+                                                    <div>
+                                                      <p className="text-2xl font-bold text-green-600">
+                                                        {performance.final_score.toFixed(1)}
+                                                      </p>
+                                                      <p className="text-xs text-gray-500">Final Score</p>
+                                                    </div>
+                                                  ) : (
+                                                    <div>
+                                                      <p className="text-lg font-semibold text-gray-400">-</p>
+                                                      <p className="text-xs text-gray-500">Pending</p>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Kumite Match Draws Tab */}
+            {activeTab === "kumite-match-draws" && (() => {
+              // Get coach's players' registered Kumite events
+              const coachPlayerRegistrations = registrations.filter(r => {
+                const regPlayerId = r.player_id?._id || r.player_id;
+                const isCoachPlayer = players.some(p => p._id === regPlayerId);
+                return isCoachPlayer &&
+                       r.registration_type === 'Individual' &&
+                       r.approval_status === 'Approved' &&
+                       r.payment_status === 'Paid';
+              });
+
+              const kumiteEventIds = coachPlayerRegistrations
+                .map(r => r.category_id?._id || r.category_id)
+                .filter(Boolean);
+
+              const kumiteCategories = categories.filter(c => 
+                (c.category_type === 'Kumite' || c.category_type === 'Team Kumite') &&
+                kumiteEventIds.some(eventId => 
+                  c._id?.toString() === eventId?.toString() || c._id === eventId
+                )
+              );
+
+              // Group matches by category
+              const matchesByCategory = {};
+              kumiteCategories.forEach(category => {
+                const categoryMatches = matches.filter(m => {
+                  const matchCategoryId = m.category_id?._id || m.category_id;
+                  return matchCategoryId?.toString() === category._id?.toString() || matchCategoryId === category._id;
+                });
+                if (categoryMatches.length > 0) {
+                  matchesByCategory[category._id] = {
+                    category,
+                    matches: categoryMatches
+                  };
+                }
+              });
+
+              // Always include Kumite categories even if no matches yet
+              kumiteCategories.forEach(category => {
+                if (!matchesByCategory[category._id]) {
+                  matchesByCategory[category._id] = {
+                    category,
+                    matches: []
+                  };
+                }
+              });
+
+              const hasKumiteEvents = Object.keys(matchesByCategory).length > 0;
+
+              return (
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">Kumite Match Draws</h2>
+                      <p className="text-gray-600">View match draws for Kumite events your players are registered for</p>
+                    </div>
+                    <button
+                      onClick={() => loadData()}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                    >
+                      <FiRefreshCw className="w-4 h-4" />
+                      Refresh
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {!hasKumiteEvents ? (
+                    <div className="text-center py-12">
+                      <FiTarget className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">No Kumite Events Registered</h3>
+                      <p className="text-gray-600">Your players need to register and get approved for Kumite events to see match draws</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      {Object.values(matchesByCategory).map(({ category, matches: categoryMatches }) => {
+                        return (
+                          <div key={category._id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
+                            <div className="mb-6">
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-2xl font-bold text-gray-800">{category.category_name}</h3>
+                                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                  {category.category_type}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600">
+                                {category.participation_type} • {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
+                              </p>
+                            </div>
+                            
+                            {categoryMatches.length === 0 ? (
+                              <div className="text-center py-8 bg-white rounded-lg">
+                                <p className="text-gray-600">No match draws yet. The organizer will create match draws for this event.</p>
+                              </div>
+                            ) : (
+                              <MatchDrawsBracket 
+                                matches={categoryMatches} 
+                                category={category}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Registrations Tab */}
             {activeTab === "registrations" && (
@@ -2068,15 +2277,6 @@ const CoachDashboard = () => {
                   <h2 className="text-2xl font-bold text-gray-800">
                     Registrations
                   </h2>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowRegisterTeam(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                    >
-                      <FiPlus className="w-5 h-5" />
-                      Register Team
-                    </button>
-                  </div>
                 </div>
                 {registrations.length === 0 ? (
                   <div className="text-center py-12">
@@ -2096,7 +2296,6 @@ const CoachDashboard = () => {
                         registration={registration}
                         tournaments={tournaments}
                         players={players}
-                        teams={teams}
                         onMakePayment={() =>
                           handleMakePayment(registration._id)
                         }
@@ -2612,9 +2811,6 @@ const CoachDashboard = () => {
                         (p) =>
                           players.some(
                             (pl) => pl._id === (p.player_id?._id || p.player_id)
-                          ) ||
-                          teams.some(
-                            (t) => t._id === (p.team_id?._id || p.team_id)
                           )
                       );
                     })
@@ -2630,16 +2826,6 @@ const CoachDashboard = () => {
                       />
                     ))}
                 </div>
-              </div>
-            )}
-
-            {/* Results Tab */}
-            {activeTab === "results" && (
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                  Live Results
-                </h2>
-                <LiveScoreboard />
               </div>
             )}
 
@@ -2675,24 +2861,6 @@ const CoachDashboard = () => {
           </div>
         </div>
 
-        {/* Create Team Modal */}
-        {showCreateTeam && (
-          <CreateTeamModal
-            isOpen={showCreateTeam}
-            onClose={() => {
-              setShowCreateTeam(false);
-              setTeamForm({
-                team_name: "",
-                team_type: "Team Kata",
-                description: "",
-              });
-            }}
-            onSubmit={handleCreateTeam}
-            formData={teamForm}
-            setFormData={setTeamForm}
-            players={players}
-          />
-        )}
 
         {/* Register Player Modal */}
         {showRegisterPlayer && (
@@ -2704,7 +2872,6 @@ const CoachDashboard = () => {
                 tournament_id: "",
                 category_id: "",
                 player_id: "",
-                team_id: "",
                 registration_type: "Individual",
                 event_type: "Kata",
               });
@@ -2718,29 +2885,6 @@ const CoachDashboard = () => {
           />
         )}
 
-        {/* Register Team Modal */}
-        {showRegisterTeam && (
-          <RegisterTeamModal
-            isOpen={showRegisterTeam}
-            onClose={() => {
-              setShowRegisterTeam(false);
-              setRegistrationForm({
-                tournament_id: "",
-                category_id: "",
-                player_id: "",
-                team_id: "",
-                registration_type: "Team",
-                event_type: "Team Kata",
-              });
-            }}
-            onSubmit={handleRegisterTeam}
-            formData={registrationForm}
-            setFormData={setRegistrationForm}
-            tournaments={tournaments}
-            teams={teams}
-            categories={categories}
-          />
-        )}
 
         {/* Payment Modal for Player Registration */}
         {showPaymentModal && pendingRegistration && pendingCategory && (
@@ -2785,7 +2929,6 @@ const CoachDashboard = () => {
                 tournament_id: "",
                 category_id: "",
                 player_id: "",
-                team_id: "",
                 registration_type: "Individual",
                 event_type: "Kata",
               });
@@ -3143,6 +3286,9 @@ const CoachDashboard = () => {
             }}
           />
         )}
+
+        {/* Chatbot Popup */}
+        <ChatbotPopup />
       </Layout>
     </>
   );
@@ -3284,32 +3430,12 @@ const PlayerCard = ({
   );
 };
 
-// Team Card Component
-const TeamCard = ({ team }) => {
-  return (
-    <div className="border border-gray-200 rounded-xl p-4 hover:shadow-lg transition">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-lg text-gray-800">{team.team_name}</h3>
-        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-          {team.team_type}
-        </span>
-      </div>
-      {team.description && (
-        <p className="text-sm text-gray-600 mb-3">{team.description}</p>
-      )}
-      <p className="text-sm text-gray-600">
-        Members: {team.members?.length || 0}
-      </p>
-    </div>
-  );
-};
 
 // Registration Card Component
 const RegistrationCard = ({
   registration,
   tournaments,
   players,
-  teams,
   onMakePayment,
 }) => {
   const tournament = tournaments.find((t) => {
@@ -3326,10 +3452,6 @@ const RegistrationCard = ({
       p._id === regPlayerId || p._id?.toString() === regPlayerId?.toString()
     );
   });
-  const team = teams.find((t) => {
-    const regTeamId = registration.team_id?._id || registration.team_id;
-    return t._id === regTeamId || t._id?.toString() === regTeamId?.toString();
-  });
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
@@ -3342,7 +3464,7 @@ const RegistrationCard = ({
             {registration.registration_type}:{" "}
             {player
               ? player.user_id?.first_name || player.name
-              : team?.team_name || "N/A"}
+              : "N/A"}
           </p>
           <div className="flex items-center gap-4 mt-2">
             <span
@@ -3599,95 +3721,6 @@ const NotificationCard = ({ notification }) => {
   );
 };
 
-// Create Team Modal Component
-const CreateTeamModal = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  formData,
-  setFormData,
-  players,
-}) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">Create Team</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <FiX className="w-6 h-6" />
-          </button>
-        </div>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Team Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.team_name}
-              onChange={(e) =>
-                setFormData({ ...formData, team_name: e.target.value })
-              }
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Enter team name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Team Type <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.team_type}
-              onChange={(e) =>
-                setFormData({ ...formData, team_type: e.target.value })
-              }
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            >
-              <option value="Team Kata">Team Kata</option>
-              <option value="Team Kumite">Team Kumite</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Team description (optional)"
-            />
-          </div>
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Create Team
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 // Register Player Modal Component
 const RegisterPlayerModal = ({
@@ -3885,193 +3918,5 @@ const RegisterPlayerModal = ({
   );
 };
 
-// Register Team Modal Component
-const RegisterTeamModal = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  formData,
-  setFormData,
-  tournaments,
-  teams,
-  categories,
-}) => {
-  const [selectedTournamentCategories, setSelectedTournamentCategories] =
-    useState([]);
-
-  useEffect(() => {
-    if (formData.tournament_id && categories) {
-      const tournamentCategories = categories
-        .filter((c) => {
-          const catTournamentId = c.tournament_id?._id || c.tournament_id;
-          return (
-            catTournamentId === formData.tournament_id ||
-            catTournamentId?.toString() === formData.tournament_id?.toString()
-          );
-        })
-        .filter((c) => c.participation_type === "Team");
-      setSelectedTournamentCategories(tournamentCategories);
-    } else {
-      setSelectedTournamentCategories([]);
-    }
-  }, [formData.tournament_id, categories]);
-
-  if (!isOpen) return null;
-
-  const selectedCategory = selectedTournamentCategories.find(
-    (c) =>
-      c._id === formData.category_id ||
-      c._id?.toString() === formData.category_id?.toString()
-  );
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">Register Team</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <FiX className="w-6 h-6" />
-          </button>
-        </div>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tournament <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.tournament_id}
-              onChange={(e) => {
-                setFormData({
-                  ...formData,
-                  tournament_id: e.target.value,
-                  category_id: "",
-                });
-              }}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            >
-              <option value="">Select Tournament</option>
-              {tournaments
-                .filter((t) => t.status === "Open" || t.status === "Ongoing")
-                .map((t) => (
-                  <option key={t._id} value={t._id}>
-                    {t.tournament_name}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {formData.tournament_id && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Event <span className="text-red-500">*</span>
-              </label>
-              {selectedTournamentCategories.length === 0 ? (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-                  No team events available for this tournament. Please ask the
-                  organizer to create team events.
-                </div>
-              ) : (
-                <>
-                  <select
-                    value={formData.category_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category_id: e.target.value })
-                    }
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  >
-                    <option value="">Select Event</option>
-                    {selectedTournamentCategories.map((cat) => {
-                      const fee =
-                        cat.participation_type === "Individual"
-                          ? cat.individual_player_fee
-                          : cat.team_event_fee;
-                      return (
-                        <option key={cat._id} value={cat._id}>
-                          {cat.category_name} - {cat.category_type} (
-                          {cat.age_category}
-                          {cat.belt_category ? ` - ${cat.belt_category}` : ""}
-                          {cat.weight_category
-                            ? ` - ${cat.weight_category}`
-                            : ""}
-                          ) - Rs {fee?.toFixed(2) || "0.00"}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Matches (rounds) will be generated automatically from
-                    registrations in this event
-                  </p>
-                </>
-              )}
-              {selectedCategory && (
-                <div className="mt-2 bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm font-semibold text-green-900">
-                    {selectedCategory.participation_type === "Individual"
-                      ? `Individual Player Fee: Rs ${
-                          selectedCategory.individual_player_fee?.toFixed(2) ||
-                          "0.00"
-                        }`
-                      : `Team Event Fee (${
-                          selectedCategory.team_size || 3
-                        } members): Rs ${
-                          selectedCategory.team_event_fee?.toFixed(2) || "0.00"
-                        }`}
-                  </p>
-                  <p className="text-xs text-green-700 mt-1">
-                    Registering for this event. Matches will be created after
-                    organizer approval.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Team <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.team_id}
-              onChange={(e) =>
-                setFormData({ ...formData, team_id: e.target.value })
-              }
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-            >
-              <option value="">Select Team</option>
-              {teams.map((t) => (
-                <option key={t._id} value={t._id}>
-                  {t.team_name} ({t.team_type})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Register
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 export default CoachDashboard;

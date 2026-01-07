@@ -242,15 +242,6 @@ const JudgeSchedule = () => {
                           {match.tournament_id.venue}
                         </div>
                       )}
-                      <button
-                        onClick={() => {
-                          window.location.href = `/judge/scoring?match=${match._id}`;
-                        }}
-                        className="mt-3 w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center justify-center"
-                      >
-                        <FiZap className="w-4 h-4 mr-1" />
-                        Score Now
-                      </button>
                     </motion.div>
                   ))}
                 </div>
