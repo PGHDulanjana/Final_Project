@@ -1,0 +1,139 @@
+
+> xpertkarate-backend@1.0.0 test
+> cross-env NODE_ENV=test jest tests/integration/score.test.js
+
+(node:21912) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL tests/integration/score.test.js
+  Score Controller Integration Tests
+    POST /api/scores
+      √ should submit a score as assigned judge (541 ms)
+      × should fail if judge is not assigned (283 ms)
+      √ should allow organizer to submit score for a judge (253 ms)
+    GET /api/scores
+      √ should get scores for a match (270 ms)
+
+  ● Score Controller Integration Tests › POST /api/scores › should fail if judge is not assigned
+
+    ValidationError: Judge validation failed: certification_level: `B` is not a valid enum value for path `certification_level`.
+
+      at model.Document.invalidate (node_modules/mongoose/lib/document.js:3219:32)
+      at node_modules/mongoose/lib/document.js:3012:17
+      at node_modules/mongoose/lib/schematype.js:1368:9
+
+-------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------------------------
+File                           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                         
+-------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------------------------
+All files                      |   18.25 |     2.65 |    2.77 |   18.74 |                                                                                           
+ src                           |   77.92 |     6.66 |      20 |   77.63 |                                                                                           
+  app.js                       |   77.92 |     6.66 |      20 |   77.63 | 56-62,81-111,118,149                                                                      
+ src/controllers               |    8.86 |     2.35 |    0.75 |    9.14 |                                                                                           
+  authController.js            |    5.52 |        0 |       0 |    5.88 | 15-468,476-562,570-608,616-622,630-731,739-768,776-819,827-917                            
+  categoryController.js        |   17.02 |        0 |       0 |   17.02 | 8-22,30-46,54-82,90-123,131-160                                                           
+  chatController.js            |    8.33 |        0 |       0 |    8.82 | 11-38,46-73,81-110,118-150,158-184,192-650                                                
+  coachController.js           |   18.75 |        0 |       0 |   18.75 | 9-44,52-68,76-105,113-142,150-167                                                         
+  dojoController.js            |   17.02 |        0 |       0 |   17.02 | 8-19,27-43,51-80,88-118,126-152                                                           
+  judgeController.js           |    18.6 |        0 |       0 |    18.6 | 8-19,27-43,51-80,88-117,125-142                                                           
+  kataPerformanceController.js |    5.02 |        0 |       0 |    5.27 | 13-66,74-112,120-262,268-273,281-799,811-822,828-873,880-955,963-1054,1062-1107,1115-1172 
+  kataReportController.js      |    8.33 |        0 |       0 |    8.77 | 11-253,261-281,289-303,311-337                                                            
+  kumiteReportController.js    |    6.38 |        0 |       0 |    6.74 | 13-422,430-450,458-472,480-509                                                            
+  matchController.js           |    3.41 |        0 |       0 |    3.52 | 12-129,137-190,198-207,215-269,277-297,305-414,424-796,805-1163,1171-1213                 
+  notificationController.js    |    14.7 |        0 |       0 |    14.7 | 8-35,43-66,74-86,94-119,127-155,163-174,182-207                                           
+  organizerController.js       |    18.6 |        0 |       0 |    18.6 | 8-19,27-43,51-80,88-117,125-142                                                           
+  paymentController.js         |   12.82 |        0 |       0 |   13.33 | 9-32,42-57,67-86,96-119,365-381,391-406,416-431,441-479                                   
+  playerController.js          |   14.28 |        0 |       0 |   14.28 | 9-21,29-46,54-83,91-156,164-181                                                           
+  registrationController.js    |    2.26 |        0 |       0 |     2.3 | 11-120,128-159,167-1306,1319-1441,1449-1660                                               
+  scoreController.js           |   54.31 |    52.94 |      40 |   54.38 | 30,38-56,72,81,88-94,105,116,123,137,159,192-203,208-210,230,238-286,294-322              
+  tatamiController.js          |       8 |        0 |       0 |    8.18 | 13-40,48-145,153-248,256-301,309-377,385-477,485-548,556-628,636-685,693-755              
+  teamController.js            |   21.05 |        0 |       0 |   21.05 | 8-20,28-52,60-69,77-98,106-126                                                            
+  tournamentController.js      |    8.25 |        0 |       0 |    8.91 | 9-45,53-76,84-217,225-261,269-295                                                         
+  userController.js            |   16.27 |        0 |       0 |   16.27 | 8-17,25-40,48-86,94-132                                                                   
+ src/middlewares               |   35.61 |       14 |   28.57 |   36.11 |                                                                                           
+  authMiddleware.js            |   77.77 |       70 |     100 |   77.77 | 14,28,37-43                                                                               
+  errorHandler.js              |    8.33 |        0 |       0 |    8.69 | 2-41                                                                                      
+  optionalAuth.js              |      25 |        0 |       0 |      25 | 6-37                                                                                      
+  roleMiddleware.js            |    37.5 |        0 |      50 |    37.5 | 3-17                                                                                      
+  validateRequest.js           |   42.85 |        0 |       0 |   42.85 | 4-14                                                                                      
+ src/models                    |    71.2 |     4.16 |   11.11 |   73.55 |                                                                                           
+  ChatMessage.js               |     100 |      100 |     100 |     100 |                                                                                           
+  Coach.js                     |     100 |      100 |     100 |     100 |                                                                                           
+  Dojo.js                      |     100 |      100 |     100 |     100 |                                                                                           
+  Judge.js                     |     100 |      100 |     100 |     100 |                                                                                           
+  KataPerformance.js           |     100 |      100 |     100 |     100 |                                                                                           
+  KataReport.js                |     100 |      100 |     100 |     100 |                                                                                           
+  KumiteReport.js              |     100 |      100 |     100 |     100 |                                                                                           
+  Match.js                     |     100 |      100 |     100 |     100 |                                                                                           
+  MatchJudge.js                |     100 |      100 |     100 |     100 |                                                                                           
+  MatchParticipant.js          |     100 |      100 |     100 |     100 |                                                                                           
+  Notification.js              |     100 |      100 |     100 |     100 |                                                                                           
+  Organizer.js                 |     100 |      100 |     100 |     100 |                                                                                           
+  Payment.js                   |     100 |      100 |     100 |     100 |                                                                                           
+  Player.js                    |     100 |      100 |     100 |     100 |                                                                                           
+  Registration.js              |   20.93 |        0 |       0 |   23.07 | 107-182                                                                                   
+  Score.js                     |     100 |      100 |     100 |     100 |                                                                                           
+  Tatami.js                    |     100 |      100 |     100 |     100 |                                                                                           
+  Team.js                      |     100 |      100 |     100 |     100 |                                                                                           
+  TeamMember.js                |     100 |      100 |     100 |     100 |                                                                                           
+  Tournament.js                |     100 |      100 |     100 |     100 |                                                                                           
+  TournamentCategory.js        |     100 |      100 |     100 |     100 |                                                                                           
+  User.js                      |   83.33 |       50 |      50 |   83.33 | 86,95                                                                                     
+ src/routes                    |     100 |      100 |     100 |     100 |                                                                                           
+  authRoutes.js                |     100 |      100 |     100 |     100 |                                                                                           
+  categoryRoutes.js            |     100 |      100 |     100 |     100 |                                                                                           
+  chatRoutes.js                |     100 |      100 |     100 |     100 |                                                                                           
+  coachRoutes.js               |     100 |      100 |     100 |     100 |                                                                                           
+  dojoRoutes.js                |     100 |      100 |     100 |     100 |                                                                                           
+  judgeRoutes.js               |     100 |      100 |     100 |     100 |                                                                                           
+  kataPerformanceRoutes.js     |     100 |      100 |     100 |     100 |                                                                                           
+  kataReportRoutes.js          |     100 |      100 |     100 |     100 |                                                                                           
+  kumiteReportRoutes.js        |     100 |      100 |     100 |     100 |                                                                                           
+  matchRoutes.js               |     100 |      100 |     100 |     100 |                                                                                           
+  notificationRoutes.js        |     100 |      100 |     100 |     100 |                                                                                           
+  organizerRoutes.js           |     100 |      100 |     100 |     100 |                                                                                           
+  paymentRoutes.js             |     100 |      100 |     100 |     100 |                                                                                           
+  playerRoutes.js              |     100 |      100 |     100 |     100 |                                                                                           
+  registrationRoutes.js        |     100 |      100 |     100 |     100 |                                                                                           
+  scoreRoutes.js               |     100 |      100 |     100 |     100 |                                                                                           
+  tatamiRoutes.js              |     100 |      100 |     100 |     100 |                                                                                           
+  teamRoutes.js                |     100 |      100 |     100 |     100 |                                                                                           
+  tournamentRoutes.js          |     100 |      100 |     100 |     100 |                                                                                           
+  userRoutes.js                |     100 |      100 |     100 |     100 |                                                                                           
+ src/services                  |    7.79 |        0 |       0 |    8.05 |                                                                                           
+  drawGenerationService.js     |    7.18 |        0 |       0 |    7.78 | 19-328,336-489                                                                            
+  paymentService.js            |    8.23 |        0 |       0 |    8.23 | 21-22,37-40,56-362,376-636,649-663,673-687,697-708,722-739,752-761,774-788,797,802-822    
+ src/utils                     |   21.59 |    11.86 |   11.11 |   21.67 |                                                                                           
+  emailService.js              |   31.11 |    31.57 |    12.5 |   31.11 | 27-35,39-66,74-83,87-89,93-95,99-101,105-147                                              
+  geminiService.js             |    5.76 |        0 |       0 |    5.76 | 7-20,29-214,224-251                                                                       
+  generateToken.js             |    87.5 |       50 |     100 |    87.5 | 20                                                                                        
+  imageHandler.js              |   46.15 |    21.42 |       0 |      48 | 8,14-18,25-28,46-49,56-57                                                                 
+  payhere.js                   |   23.25 |       12 |       0 |   23.25 | 18-21,34-45,70-82,92,128-188,202-203                                                      
+  socket.js                    |   21.05 |     8.33 |    8.33 |   21.05 | 6-60,64-67,73-74,79-81,86-87                                                              
+ src/validations               |   25.45 |        0 |       0 |   25.45 |                                                                                           
+  registrationValidation.js    |   11.11 |        0 |       0 |   11.11 | 16-86                                                                                     
+  tournamentValidation.js      |   35.71 |        0 |       0 |   35.71 | 17-37,119-122                                                                             
+  userValidation.js            |     100 |      100 |     100 |     100 |                                                                                           
+-------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------------------------
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        4.378 s, estimated 8 s
+Ran all test suites matching tests/integration/score.test.js.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Email service is ready".
+
+    [0m[0m
+
+      at console.log (node_modules/@jest/console/build/index.js:311:10)
+      at src/utils/emailService.js:1117:15
+      at finalize (node_modules/nodemailer/lib/smtp-transport/index.js:364:24)
+      at node_modules/nodemailer/lib/smtp-transport/index.js:386:25
+      at SMTPConnection._actionAUTHComplete (node_modules/nodemailer/lib/smtp-connection/index.js:1602:9)
+      at SMTPConnection.<anonymous> (node_modules/nodemailer/lib/smtp-connection/index.js:556:26)
+      at SMTPConnection._processResponse (node_modules/nodemailer/lib/smtp-connection/index.js:993:20)
+      at SMTPConnection._onData (node_modules/nodemailer/lib/smtp-connection/index.js:774:14)
+      at TLSSocket.SMTPConnection._onSocketData (node_modules/nodemailer/lib/smtp-connection/index.js:195:44)
+

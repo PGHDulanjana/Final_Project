@@ -108,7 +108,7 @@ const AdminDashboard = () => {
 
       // Extract data from Promise.allSettled results
       setUsers(usersRes.status === 'fulfilled' ? (usersRes.value.data || []) : []);
-      
+
       // Extract players data - handle nested response structure
       let allPlayers = [];
       if (playersRes.status === 'fulfilled') {
@@ -122,7 +122,7 @@ const AdminDashboard = () => {
         console.error('❌ Failed to load players:', playersRes.reason);
       }
       setPlayers(allPlayers);
-      
+
       // Extract coaches data - handle nested response structure
       let allCoaches = [];
       if (coachesRes.status === 'fulfilled') {
@@ -134,13 +134,13 @@ const AdminDashboard = () => {
         }
       }
       setCoaches(allCoaches);
-      
+
       setTournaments(tournamentsRes.status === 'fulfilled' ? (tournamentsRes.value.data || []) : []);
       setRegistrations(registrationsRes.status === 'fulfilled' ? (registrationsRes.value.data || []) : []);
       setMatches(matchesRes.status === 'fulfilled' ? (matchesRes.value.data || []) : []);
       setPayments(paymentsRes.status === 'fulfilled' ? (paymentsRes.value.data || []) : []);
       setCategories(categoriesRes.status === 'fulfilled' ? (categoriesRes.value.data || []) : []);
-      
+
       // Handle notifications separately - if it fails with 401, just set empty array
       if (notificationsRes.status === 'fulfilled') {
         setNotifications(notificationsRes.value.data || []);
@@ -156,14 +156,13 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      
+
       // If it's a 401 error, the interceptor should handle redirect, but log it
       if (error.response?.status === 401) {
         console.error('Authentication failed. Token may be missing or expired.');
       } else {
         toast.error('Failed to load dashboard data');
       }
-      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -267,11 +266,11 @@ const AdminDashboard = () => {
   // Group players by coach - CRITICAL: Include ALL players, even if user record is missing
   const playersByCoach = {};
   const playersWithoutCoach = [];
-  
+
   players.forEach((player, index) => {
     // Handle populated user_id (object) or direct user_id (string/ObjectId)
     const playerUserId = player.user_id?._id || player.user_id;
-    
+
     // Try to find matching user in users array
     let playerUser = null;
     if (playerUserId) {
@@ -280,7 +279,7 @@ const AdminDashboard = () => {
         return String(userId) === String(playerUserId);
       });
     }
-    
+
     // If user not found in users array, use populated user_id data from player
     let playerUserData = playerUser;
     if (!playerUserData) {
@@ -313,7 +312,7 @@ const AdminDashboard = () => {
         });
       }
     }
-    
+
     if (!playerUserData) {
       console.error(`❌ Player ${index + 1} has no user_id at all, skipping:`, {
         player_id: player._id,
@@ -323,18 +322,18 @@ const AdminDashboard = () => {
       });
       return;
     }
-    
+
     // Get coach ID from player
     const coachId = player.coach_id?._id || player.coach_id;
     const coachName = player.coach_name;
-    
+
     if (coachId) {
       // Find coach profile
       const coach = coaches.find(c => {
         const coachProfileId = c._id;
         return String(coachProfileId) === String(coachId);
       });
-      
+
       if (coach) {
         // Find coach user
         const coachUserId = coach.user_id?._id || coach.user_id;
@@ -342,7 +341,7 @@ const AdminDashboard = () => {
           const userId = u._id;
           return String(userId) === String(coachUserId);
         }) : null;
-        
+
         if (coachUser) {
           const coachKey = coachUser._id;
           if (!playersByCoach[coachKey]) {
@@ -366,7 +365,7 @@ const AdminDashboard = () => {
         console.warn(`⚠️ Player has coach_id ${coachId} but no matching coach profile found`);
       }
     }
-    
+
     // If no coach found or coach user not found, add to players without coach
     playersWithoutCoach.push({
       ...playerUserData,
@@ -375,7 +374,7 @@ const AdminDashboard = () => {
       dojo_name: player.dojo_name || 'No dojo'
     });
   });
-  
+
 
   // Filter users (excluding players, as they'll be shown under coaches)
   const filteredNonPlayerUsers = users.filter(u => {
@@ -400,18 +399,18 @@ const AdminDashboard = () => {
   // Filter coaches and their players
   const filteredCoachesWithPlayers = Object.values(playersByCoach).filter(coachGroup => {
     const coach = coachGroup.coach;
-    
+
     // Filter by role
     if (filterRole !== 'all' && filterRole !== 'Coach' && filterRole !== 'Player') {
       return false;
     }
-    
+
     // Filter by status
     if (filterStatus !== 'all') {
       if (filterStatus === 'active' && !coach.is_active) return false;
       if (filterStatus === 'inactive' && coach.is_active) return false;
     }
-    
+
     // Filter players within coach group
     if (filterRole === 'Player' || filterRole === 'all') {
       coachGroup.players = coachGroup.players.filter(player => {
@@ -435,7 +434,7 @@ const AdminDashboard = () => {
     } else {
       coachGroup.players = [];
     }
-    
+
     // Check if coach matches search
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -448,18 +447,18 @@ const AdminDashboard = () => {
       const playersMatch = coachGroup.players.length > 0;
       return coachMatches || playersMatch;
     }
-    
+
     // Show coach if they have players (when filterRole is Player or all)
     // OR show coach if filterRole is Coach (even without players)
     if (filterRole === 'Player' || filterRole === 'all') {
       return coachGroup.players.length > 0;
     }
-    
+
     // If filterRole is Coach, show all coaches regardless of player count
     if (filterRole === 'Coach') {
       return true;
     }
-    
+
     return true;
   });
 
@@ -486,7 +485,7 @@ const AdminDashboard = () => {
 
   // Group users by tournament
   const usersByTournament = {};
-  
+
   // First, initialize all tournaments (including those with no registrations yet)
   tournaments.forEach(tournament => {
     const tournamentIdStr = String(tournament._id);
@@ -498,7 +497,7 @@ const AdminDashboard = () => {
       judges: [],
       organizers: []
     };
-    
+
     // Add organizer from tournament (organizers create tournaments, they don't register)
     if (tournament.organizer_id) {
       const organizerId = tournament.organizer_id?._id || tournament.organizer_id;
@@ -520,17 +519,17 @@ const AdminDashboard = () => {
       }
     }
   });
-  
+
   // Process registrations to group users by tournament
   registrations.forEach(reg => {
     const tournamentId = reg.tournament_id?._id || reg.tournament_id;
     if (!tournamentId) return;
-    
+
     const tournamentIdStr = String(tournamentId);
-    
+
     // Ensure tournament group exists
     if (!usersByTournament[tournamentIdStr]) {
-      const tournament = tournaments.find(t => 
+      const tournament = tournaments.find(t =>
         String(t._id) === tournamentIdStr
       );
       usersByTournament[tournamentIdStr] = {
@@ -542,9 +541,9 @@ const AdminDashboard = () => {
         organizers: []
       };
     }
-    
+
     const tournamentGroup = usersByTournament[tournamentIdStr];
-    
+
     // Handle different registration types
     if (reg.registration_type === 'Individual' && reg.player_id) {
       const playerId = reg.player_id?._id || reg.player_id;
@@ -557,14 +556,14 @@ const AdminDashboard = () => {
           const playerCoachId = player.coach_id?._id || player.coach_id;
           const playerCoachName = player.coach_name;
           const playerDojoName = player.dojo_name;
-          
+
           if (playerCoachId) {
             // Find coach profile
             const coach = coaches.find(c => String(c._id) === String(playerCoachId));
             if (coach) {
               const coachUserId = coach.user_id?._id || coach.user_id;
               const coachUser = users.find(u => String(u._id) === String(coachUserId));
-              
+
               if (coachUser) {
                 // Group player under coach
                 const coachKey = String(coachUser._id);
@@ -575,18 +574,18 @@ const AdminDashboard = () => {
                     dojos: {} // Group players by dojo under this coach
                   };
                 }
-                
+
                 // Group player by dojo
                 const dojoKey = playerDojoName || 'No Dojo';
                 if (!tournamentGroup.playersByCoach[coachKey].dojos[dojoKey]) {
                   tournamentGroup.playersByCoach[coachKey].dojos[dojoKey] = [];
                 }
-                
+
                 // Check if player already added
                 const existingPlayer = tournamentGroup.playersByCoach[coachKey].dojos[dojoKey].find(
                   p => String(p._id) === String(playerUser._id)
                 );
-                
+
                 if (!existingPlayer) {
                   tournamentGroup.playersByCoach[coachKey].dojos[dojoKey].push({
                     ...playerUser,
@@ -596,7 +595,7 @@ const AdminDashboard = () => {
                     registration: reg
                   });
                 }
-                
+
                 // Add coach to coaches list if not already there
                 if (!tournamentGroup.coaches.find(c => String(c._id) === String(coachUser._id))) {
                   tournamentGroup.coaches.push({
@@ -609,7 +608,7 @@ const AdminDashboard = () => {
               }
             }
           }
-          
+
           // If no coach found, add to players without coach
           const existingPlayer = tournamentGroup.playersWithoutCoach.find(
             p => String(p._id) === String(playerUser._id)
@@ -654,7 +653,7 @@ const AdminDashboard = () => {
       }
     }
   });
-  
+
   // Track all users registered for tournaments
   const registeredUserIds = new Set();
   Object.values(usersByTournament).forEach(tournamentGroup => {
@@ -731,10 +730,10 @@ const AdminDashboard = () => {
   };
 
   const hasUnregisteredUsers = filteredUnregisteredUsers.players.length > 0 ||
-                               filteredUnregisteredUsers.coaches.length > 0 ||
-                               filteredUnregisteredUsers.judges.length > 0 ||
-                               filteredUnregisteredUsers.organizers.length > 0 ||
-                               filteredUnregisteredUsers.admins.length > 0;
+    filteredUnregisteredUsers.coaches.length > 0 ||
+    filteredUnregisteredUsers.judges.length > 0 ||
+    filteredUnregisteredUsers.organizers.length > 0 ||
+    filteredUnregisteredUsers.admins.length > 0;
 
   // Filter tournaments and their users based on search/filters
   const filteredTournamentsWithUsers = Object.values(usersByTournament)
@@ -743,14 +742,14 @@ const AdminDashboard = () => {
       const filteredPlayersByCoach = {};
       Object.keys(tournamentGroup.playersByCoach).forEach(coachKey => {
         const coachGroup = tournamentGroup.playersByCoach[coachKey];
-        
+
         // Filter coach
         if (filterRole !== 'all' && filterRole !== 'Coach' && filterRole !== 'Player') {
           // Skip this coach group if filtering for non-coach/player roles
         } else {
           const coachPassesFilter = filterRole === 'all' || filterRole === 'Coach' || filterRole === 'Player';
           const coachMatchesSearch = !searchTerm || filterUser(coachGroup.coach);
-          
+
           if (coachPassesFilter && coachMatchesSearch) {
             // Filter dojos and players
             const filteredDojos = {};
@@ -759,12 +758,12 @@ const AdminDashboard = () => {
                 if (filterRole !== 'all' && filterRole !== 'Player') return false;
                 return filterUser(player);
               });
-              
+
               if (filteredPlayers.length > 0) {
                 filteredDojos[dojoKey] = filteredPlayers;
               }
             });
-            
+
             if (Object.keys(filteredDojos).length > 0) {
               filteredPlayersByCoach[coachKey] = {
                 ...coachGroup,
@@ -774,31 +773,31 @@ const AdminDashboard = () => {
           }
         }
       });
-      
+
       // Filter players without coach
       const filteredPlayersWithoutCoach = tournamentGroup.playersWithoutCoach.filter(player => {
         if (filterRole !== 'all' && filterRole !== 'Player') return false;
         return filterUser(player);
       });
-      
+
       // Filter coaches
       const filteredCoaches = tournamentGroup.coaches.filter(coach => {
         if (filterRole !== 'all' && filterRole !== 'Coach') return false;
         return filterUser(coach);
       });
-      
+
       // Filter judges
       const filteredJudges = tournamentGroup.judges.filter(judge => {
         if (filterRole !== 'all' && filterRole !== 'Judge') return false;
         return filterUser(judge);
       });
-      
+
       // Filter organizers
       const filteredOrganizers = tournamentGroup.organizers.filter(organizer => {
         if (filterRole !== 'all' && filterRole !== 'Organizer') return false;
         return filterUser(organizer);
       });
-      
+
       return {
         ...tournamentGroup,
         playersByCoach: filteredPlayersByCoach,
@@ -816,14 +815,14 @@ const AdminDashboard = () => {
           totalPlayers += players.length;
         });
       });
-      
+
       // Show tournament if it has any users after filtering or matches search
-      const hasUsers = totalPlayers > 0 || 
-                      tournamentGroup.coaches.length > 0 || 
-                      tournamentGroup.judges.length > 0 ||
-                      tournamentGroup.organizers.length > 0;
+      const hasUsers = totalPlayers > 0 ||
+        tournamentGroup.coaches.length > 0 ||
+        tournamentGroup.judges.length > 0 ||
+        tournamentGroup.organizers.length > 0;
       const matchesSearch = searchTerm && tournamentGroup.tournament.tournament_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      
+
       return hasUsers || matchesSearch;
     })
     .sort((a, b) => {
@@ -877,11 +876,10 @@ const AdminDashboard = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${
-                      activeTab === tab.id
+                    className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${activeTab === tab.id
                         ? 'border-b-2 border-blue-600 text-blue-600'
                         : 'text-gray-600 hover:text-gray-800'
-                    }`}
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                     {tab.label}
@@ -1174,8 +1172,8 @@ const AdminDashboard = () => {
                                 });
                                 return (
                                   <span className="px-2 py-1 bg-white bg-opacity-20 rounded-full text-xs">
-                                    {totalPlayers} Player{totalPlayers !== 1 ? 's' : ''} | 
-                                    {tournamentGroup.coaches.length} Coach{tournamentGroup.coaches.length !== 1 ? 'es' : ''} | 
+                                    {totalPlayers} Player{totalPlayers !== 1 ? 's' : ''} |
+                                    {tournamentGroup.coaches.length} Coach{tournamentGroup.coaches.length !== 1 ? 'es' : ''} |
                                     {tournamentGroup.judges.length} Judge{tournamentGroup.judges.length !== 1 ? 's' : ''} |
                                     {tournamentGroup.organizers.length} Organizer{tournamentGroup.organizers.length !== 1 ? 's' : ''}
                                   </span>
@@ -1183,31 +1181,30 @@ const AdminDashboard = () => {
                               })()}
                             </div>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            tournamentGroup.tournament.status === 'Open' ? 'bg-green-500' :
-                            tournamentGroup.tournament.status === 'Ongoing' ? 'bg-blue-500' :
-                            tournamentGroup.tournament.status === 'Completed' ? 'bg-gray-500' :
-                            'bg-yellow-500'
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tournamentGroup.tournament.status === 'Open' ? 'bg-green-500' :
+                              tournamentGroup.tournament.status === 'Ongoing' ? 'bg-blue-500' :
+                                tournamentGroup.tournament.status === 'Completed' ? 'bg-gray-500' :
+                                  'bg-yellow-500'
+                            }`}>
                             {tournamentGroup.tournament.status || 'Unknown'}
                           </span>
                         </div>
                       </div>
 
                       {/* Users Table for this Tournament */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
                             {/* Organizers */}
                             {tournamentGroup.organizers.map((user) => (
                               <tr key={user._id} className="hover:bg-gray-50 bg-yellow-50">
@@ -1224,9 +1221,8 @@ const AdminDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {user.is_active ? 'Active' : 'Inactive'}
                                   </span>
                                 </td>
@@ -1258,17 +1254,17 @@ const AdminDashboard = () => {
                                 </td>
                               </tr>
                             ))}
-                            
+
                             {/* Coaches with their Players (grouped by dojo) */}
                             {Object.values(tournamentGroup.playersByCoach).map((coachGroup) => (
-                      <React.Fragment key={coachGroup.coach._id}>
-                        {/* Coach Row */}
-                        <tr className="bg-blue-50 hover:bg-blue-100 font-semibold">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <FiUsers className="w-4 h-4 text-blue-600" />
-                              {coachGroup.coach.first_name} {coachGroup.coach.last_name}
-                              <span className="text-xs text-gray-500 font-normal">
+                              <React.Fragment key={coachGroup.coach._id}>
+                                {/* Coach Row */}
+                                <tr className="bg-blue-50 hover:bg-blue-100 font-semibold">
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center gap-2">
+                                      <FiUsers className="w-4 h-4 text-blue-600" />
+                                      {coachGroup.coach.first_name} {coachGroup.coach.last_name}
+                                      <span className="text-xs text-gray-500 font-normal">
                                         ({(() => {
                                           let totalPlayers = 0;
                                           Object.values(coachGroup.dojos).forEach(players => {
@@ -1282,50 +1278,49 @@ const AdminDashboard = () => {
                                           });
                                           return totalPlayers === 1 ? 'player' : 'players';
                                         })()})
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">{coachGroup.coach.email}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                              Coach
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              coachGroup.coach.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {coachGroup.coach.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">{coachGroup.coach.email}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                                      Coach
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`px-2 py-1 text-xs rounded-full ${coachGroup.coach.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                      }`}>
+                                      {coachGroup.coach.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
                                       FREE
                                     </span>
                                   </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedUser(coachGroup.coach);
-                                  setShowUserModal(true);
-                                }}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                title="Edit Coach"
-                              >
-                                <FiEdit className="w-5 h-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(coachGroup.coach._id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                title="Delete Coach"
-                              >
-                                <FiTrash2 className="w-5 h-5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                                
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedUser(coachGroup.coach);
+                                          setShowUserModal(true);
+                                        }}
+                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                        title="Edit Coach"
+                                      >
+                                        <FiEdit className="w-5 h-5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUser(coachGroup.coach._id)}
+                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                        title="Delete Coach"
+                                      >
+                                        <FiTrash2 className="w-5 h-5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+
                                 {/* Players under this coach, grouped by dojo */}
                                 {Object.entries(coachGroup.dojos).map(([dojoName, dojoPlayers]) => (
                                   <React.Fragment key={`${coachGroup.coach._id}-${dojoName}`}>
@@ -1341,128 +1336,124 @@ const AdminDashboard = () => {
                                         </td>
                                       </tr>
                                     )}
-                                    
+
                                     {/* Players in this dojo */}
                                     {dojoPlayers.map((player) => (
                                       <tr key={player._id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap pl-16">
-                              <div className="flex items-center gap-2">
-                                <span className="text-gray-400">└─</span>
-                                {player.first_name} {player.last_name}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">{player.email}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                                Player
-                              </span>
-                              {player.dojo_name && (
-                                <span className="ml-2 text-xs text-gray-500">({player.dojo_name})</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                player.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {player.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-gray-400">└─</span>
+                                            {player.first_name} {player.last_name}
+                                          </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">{player.email}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                          <span className={`px-2 py-1 text-xs rounded-full ${
-                                            player.registration?.payment_status === 'Paid' ? 'bg-green-100 text-green-800' :
-                                            player.registration?.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-gray-100 text-gray-800'
-                                          }`}>
+                                          <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                                            Player
+                                          </span>
+                                          {player.dojo_name && (
+                                            <span className="ml-2 text-xs text-gray-500">({player.dojo_name})</span>
+                                          )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                          <span className={`px-2 py-1 text-xs rounded-full ${player.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                            }`}>
+                                            {player.is_active ? 'Active' : 'Inactive'}
+                                          </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                          <span className={`px-2 py-1 text-xs rounded-full ${player.registration?.payment_status === 'Paid' ? 'bg-green-100 text-green-800' :
+                                              player.registration?.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-gray-100 text-gray-800'
+                                            }`}>
                                             {player.registration?.payment_status || 'N/A'}
                                           </span>
                                         </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    setSelectedUser(player);
-                                    setShowUserModal(true);
-                                  }}
-                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                  title="Edit Player"
-                                >
-                                  <FiEdit className="w-5 h-5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteUser(player._id)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                  title="Delete Player"
-                                >
-                                  <FiTrash2 className="w-5 h-5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                          <div className="flex gap-2">
+                                            <button
+                                              onClick={() => {
+                                                setSelectedUser(player);
+                                                setShowUserModal(true);
+                                              }}
+                                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                              title="Edit Player"
+                                            >
+                                              <FiEdit className="w-5 h-5" />
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteUser(player._id)}
+                                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                              title="Delete Player"
+                                            >
+                                              <FiTrash2 className="w-5 h-5" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
                                     ))}
                                   </React.Fragment>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                    
-                    {/* Players without coach */}
+                                ))}
+                              </React.Fragment>
+                            ))}
+
+                            {/* Players without coach */}
                             {tournamentGroup.playersWithoutCoach.map((player) => (
-                      <tr key={player._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                              <tr key={player._id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center gap-2">
                                     <FiUsers className="w-4 h-4 text-purple-600" />
-                          {player.first_name} {player.last_name}
-                          <span className="ml-2 text-xs text-gray-400">(No coach assigned)</span>
+                                    {player.first_name} {player.last_name}
+                                    <span className="ml-2 text-xs text-gray-400">(No coach assigned)</span>
                                   </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">{player.email}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                            Player
-                          </span>
-                          {player.dojo_name && (
-                            <span className="ml-2 text-xs text-gray-500">({player.dojo_name})</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            player.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {player.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">{player.email}</td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    player.registration?.payment_status === 'Paid' ? 'bg-green-100 text-green-800' :
-                                    player.registration?.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
+                                  <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                                    Player
+                                  </span>
+                                  {player.dojo_name && (
+                                    <span className="ml-2 text-xs text-gray-500">({player.dojo_name})</span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-2 py-1 text-xs rounded-full ${player.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {player.is_active ? 'Active' : 'Inactive'}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-2 py-1 text-xs rounded-full ${player.registration?.payment_status === 'Paid' ? 'bg-green-100 text-green-800' :
+                                      player.registration?.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-gray-100 text-gray-800'
+                                    }`}>
                                     {player.registration?.payment_status || 'N/A'}
                                   </span>
                                 </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(player);
-                                setShowUserModal(true);
-                              }}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                              title="Edit Player"
-                            >
-                              <FiEdit className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(player._id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              title="Delete Player"
-                            >
-                              <FiTrash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedUser(player);
+                                        setShowUserModal(true);
+                                      }}
+                                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                      title="Edit Player"
+                                    >
+                                      <FiEdit className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUser(player._id)}
+                                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                      title="Delete Player"
+                                    >
+                                      <FiTrash2 className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+
                             {/* Coaches (without players - coaches who registered but have no players registered) */}
                             {tournamentGroup.coaches.map((user) => {
                               // Only show coach if they don't have players (already shown above)
@@ -1470,7 +1461,7 @@ const AdminDashboard = () => {
                                 coachKey => coachKey === String(user._id)
                               );
                               if (hasPlayers) return null;
-                              
+
                               return (
                                 <tr key={user._id} className="hover:bg-gray-50 bg-blue-50">
                                   <td className="px-6 py-4 whitespace-nowrap">
@@ -1486,9 +1477,8 @@ const AdminDashboard = () => {
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 py-1 text-xs rounded-full ${
-                                      user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                    }`}>
+                                    <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                      }`}>
                                       {user.is_active ? 'Active' : 'Inactive'}
                                     </span>
                                   </td>
@@ -1521,7 +1511,7 @@ const AdminDashboard = () => {
                                 </tr>
                               );
                             })}
-                            
+
                             {/* Judges */}
                             {tournamentGroup.judges.map((user) => (
                               <tr key={user._id} className="hover:bg-gray-50 bg-green-50">
@@ -1538,9 +1528,8 @@ const AdminDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {user.is_active ? 'Active' : 'Inactive'}
                                   </span>
                                 </td>
@@ -1577,7 +1566,7 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   ))}
-                  
+
                   {/* Users Not Registered for Any Tournament */}
                   {hasUnregisteredUsers && (
                     <div className="border border-gray-200 rounded-lg overflow-hidden mt-6">
@@ -1588,8 +1577,8 @@ const AdminDashboard = () => {
                             <h3 className="text-xl font-bold mb-1">Users Not Registered for Any Tournament</h3>
                             <div className="flex items-center gap-4 text-sm text-gray-200 mt-2">
                               <span className="px-2 py-1 bg-white bg-opacity-20 rounded-full text-xs">
-                                {filteredUnregisteredUsers.players.length} Player{filteredUnregisteredUsers.players.length !== 1 ? 's' : ''} | 
-                                {filteredUnregisteredUsers.coaches.length} Coach{filteredUnregisteredUsers.coaches.length !== 1 ? 'es' : ''} | 
+                                {filteredUnregisteredUsers.players.length} Player{filteredUnregisteredUsers.players.length !== 1 ? 's' : ''} |
+                                {filteredUnregisteredUsers.coaches.length} Coach{filteredUnregisteredUsers.coaches.length !== 1 ? 'es' : ''} |
                                 {filteredUnregisteredUsers.judges.length} Judge{filteredUnregisteredUsers.judges.length !== 1 ? 's' : ''} |
                                 {filteredUnregisteredUsers.organizers.length} Organizer{filteredUnregisteredUsers.organizers.length !== 1 ? 's' : ''} |
                                 {filteredUnregisteredUsers.admins.length} Admin{filteredUnregisteredUsers.admins.length !== 1 ? 's' : ''}
@@ -1618,11 +1607,11 @@ const AdminDashboard = () => {
                           <tbody className="divide-y divide-gray-200">
                             {/* Players */}
                             {filteredUnregisteredUsers.players.map((user) => (
-                      <tr key={user._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                              <tr key={user._id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap">
                                   <div className="flex items-center gap-2">
                                     <FiUsers className="w-4 h-4 text-purple-600" />
-                          {user.first_name} {user.last_name}
+                                    {user.first_name} {user.last_name}
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
@@ -1632,9 +1621,8 @@ const AdminDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {user.is_active ? 'Active' : 'Inactive'}
                                   </span>
                                 </td>
@@ -1666,7 +1654,7 @@ const AdminDashboard = () => {
                                 </td>
                               </tr>
                             ))}
-                            
+
                             {/* Coaches */}
                             {filteredUnregisteredUsers.coaches.map((user) => (
                               <tr key={user._id} className="hover:bg-gray-50 bg-blue-50">
@@ -1675,20 +1663,19 @@ const AdminDashboard = () => {
                                     <FiUsers className="w-4 h-4 text-blue-600" />
                                     {user.first_name} {user.last_name}
                                   </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                                     Coach
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {user.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {user.is_active ? 'Active' : 'Inactive'}
+                                  </span>
+                                </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
                                     N/A
@@ -1717,7 +1704,7 @@ const AdminDashboard = () => {
                                 </td>
                               </tr>
                             ))}
-                            
+
                             {/* Judges */}
                             {filteredUnregisteredUsers.judges.map((user) => (
                               <tr key={user._id} className="hover:bg-gray-50 bg-green-50">
@@ -1734,9 +1721,8 @@ const AdminDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {user.is_active ? 'Active' : 'Inactive'}
                                   </span>
                                 </td>
@@ -1768,7 +1754,7 @@ const AdminDashboard = () => {
                                 </td>
                               </tr>
                             ))}
-                            
+
                             {/* Organizers */}
                             {filteredUnregisteredUsers.organizers.map((user) => (
                               <tr key={user._id} className="hover:bg-gray-50 bg-yellow-50">
@@ -1785,9 +1771,8 @@ const AdminDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {user.is_active ? 'Active' : 'Inactive'}
                                   </span>
                                 </td>
@@ -1819,7 +1804,7 @@ const AdminDashboard = () => {
                                 </td>
                               </tr>
                             ))}
-                            
+
                             {/* Admins */}
                             {filteredUnregisteredUsers.admins.map((user) => (
                               <tr key={user._id} className="hover:bg-gray-50 bg-red-50">
@@ -1836,9 +1821,8 @@ const AdminDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {user.is_active ? 'Active' : 'Inactive'}
                                   </span>
                                 </td>
@@ -1847,32 +1831,32 @@ const AdminDashboard = () => {
                                     N/A
                                   </span>
                                 </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setShowUserModal(true);
-                              }}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                              title="Edit User"
-                            >
-                              <FiEdit className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(user._id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              title="Delete User"
-                            >
-                              <FiTrash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedUser(user);
+                                        setShowUserModal(true);
+                                      }}
+                                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                      title="Edit User"
+                                    >
+                                      <FiEdit className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUser(user._id)}
+                                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                      title="Delete User"
+                                    >
+                                      <FiTrash2 className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1930,11 +1914,10 @@ const AdminDashboard = () => {
                           Rs {payment.amount?.toFixed(2) || '0.00'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            payment.payment_status === 'Completed' ? 'bg-green-100 text-green-800' :
-                            payment.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
+                          <span className={`px-2 py-1 text-xs rounded-full ${payment.payment_status === 'Completed' ? 'bg-green-100 text-green-800' :
+                              payment.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                            }`}>
                             {payment.payment_status}
                           </span>
                         </td>
@@ -2137,12 +2120,11 @@ const TournamentCard = ({ tournament, onApprove }) => {
     <div className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition">
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-bold text-lg text-gray-800 flex-1">{tournament.tournament_name}</h3>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-          tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-          tournament.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+            tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+              tournament.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-gray-100 text-gray-700'
+          }`}>
           {tournament.status}
         </span>
       </div>

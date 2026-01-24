@@ -207,12 +207,6 @@ const Login = () => {
               Register here
             </Link>
           </p>
-          <p className="text-sm text-gray-600">
-            Need to create an admin account?{' '}
-            <Link to="/admin/register" className="text-red-600 hover:text-red-700 font-medium">
-              Admin Registration
-            </Link>
-          </p>
         </div>
       </div>
     </div>

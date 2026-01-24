@@ -50,6 +50,16 @@ const generateKumiteReport = async (req, res, next) => {
       });
     }
 
+    // Check if all matches are completed (optional - can generate report even if some matches pending)
+    const allMatchesCompleted = matches.every(m => m.status === 'Completed');
+    const finalMatch = matches.find(m => m.match_level === 'Final');
+    const finalMatchCompleted = finalMatch && finalMatch.status === 'Completed';
+    
+    if (!finalMatchCompleted && allMatchesCompleted === false) {
+      // Warn but allow generation if organizer wants to generate partial report
+      console.log(`⚠️ Warning: Not all matches are completed. Final match status: ${finalMatch ? finalMatch.status : 'Not found'}`);
+    }
+
     // Get all participants for these matches
     const matchIds = matches.map(m => m._id);
     const participants = await MatchParticipant.find({ match_id: { $in: matchIds } })

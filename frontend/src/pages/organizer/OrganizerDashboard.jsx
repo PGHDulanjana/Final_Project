@@ -52,7 +52,7 @@ const OrganizerDashboard = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
-  
+
   // Data states
   const [tournaments, setTournaments] = useState([]);
   const [registrations, setRegistrations] = useState([]);
@@ -64,11 +64,11 @@ const OrganizerDashboard = () => {
   const [players, setPlayers] = useState([]);
   const [judges, setJudges] = useState([]);
   const [currentOrganizer, setCurrentOrganizer] = useState(null);
-  
+
   // Filter states for users view
   const [userFilterType, setUserFilterType] = useState('all'); // 'all', 'coaches', 'players', 'judges'
   const [userSearchTerm, setUserSearchTerm] = useState('');
-  
+
   // UI states
   const [showCreateTournament, setShowCreateTournament] = useState(false);
   const [showAddEventsPrompt, setShowAddEventsPrompt] = useState(false);
@@ -76,7 +76,7 @@ const OrganizerDashboard = () => {
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
   const [selectedRegistration, setSelectedRegistration] = useState(null);
   const [selectedMatch, setSelectedMatch] = useState(null);
-  
+
   // Event scoring states
   const [tatamis, setTatamis] = useState([]);
   const [kataPerformances, setKataPerformances] = useState([]);
@@ -111,43 +111,43 @@ const OrganizerDashboard = () => {
   useEffect(() => {
     if (user) {
       loadData(true);
-      
+
       // Auto-refresh data every 30 seconds, but only when tab is visible and no modals are open
       const refreshInterval = setInterval(() => {
         // Only refresh if tab is visible and no modals are open
-        if (document.visibilityState === 'visible' && 
-            !showCreateTournament && 
-            !selectedTournamentId && 
-            !selectedRegistration && 
-            !selectedMatch) {
+        if (document.visibilityState === 'visible' &&
+          !showCreateTournament &&
+          !selectedTournamentId &&
+          !selectedRegistration &&
+          !selectedMatch) {
           loadData(false); // Don't show loading spinner during auto-refresh
         }
       }, 30000); // Refresh every 30 seconds
-      
+
       // Also refresh when tab becomes visible (if no modals are open)
       const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible' && 
-            !showCreateTournament && 
-            !selectedTournamentId && 
-            !selectedRegistration && 
-            !selectedMatch) {
+        if (document.visibilityState === 'visible' &&
+          !showCreateTournament &&
+          !selectedTournamentId &&
+          !selectedRegistration &&
+          !selectedMatch) {
           loadData(false);
         }
       };
-      
+
       // Refresh when window gains focus (if no modals are open)
       const handleFocus = () => {
-        if (!showCreateTournament && 
-            !selectedTournamentId && 
-            !selectedRegistration && 
-            !selectedMatch) {
+        if (!showCreateTournament &&
+          !selectedTournamentId &&
+          !selectedRegistration &&
+          !selectedMatch) {
           loadData(false);
         }
       };
-      
+
       document.addEventListener('visibilitychange', handleVisibilityChange);
       window.addEventListener('focus', handleFocus);
-      
+
       return () => {
         clearInterval(refreshInterval);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -165,25 +165,25 @@ const OrganizerDashboard = () => {
   useEffect(() => {
     const loadKataPerformances = async () => {
       if (!currentOrganizer || categories.length === 0) return;
-      
+
       const organizerTournamentIds = tournaments
         .filter(t => isTournamentOwner(t))
         .map(t => t._id);
-      
+
       if (organizerTournamentIds.length > 0) {
         try {
           const kataPromises = categories
             .filter(c => {
               const catTournamentId = c.tournament_id?._id || c.tournament_id;
-              return organizerTournamentIds.some(tid => 
+              return organizerTournamentIds.some(tid =>
                 String(tid) === String(catTournamentId)
               ) && (c.category_type === 'Kata' || c.category_type === 'Team Kata');
             })
-            .map(c => 
+            .map(c =>
               kataPerformanceService.getPerformances({ category_id: c._id })
                 .catch(() => ({ data: [] }))
             );
-          
+
           const kataResults = await Promise.all(kataPromises);
           const allKataPerformances = kataResults.flatMap(res => res.data || []);
           setKataPerformances(allKataPerformances);
@@ -193,7 +193,7 @@ const OrganizerDashboard = () => {
         }
       }
     };
-    
+
     loadKataPerformances();
   }, [currentOrganizer, categories, tournaments]);
 
@@ -247,11 +247,11 @@ const OrganizerDashboard = () => {
       setScores(extractData(scoresRes));
       setNotifications(extractData(notificationsRes));
       setTatamis(extractData(tatamisRes));
-      
+
       // Load Kata performances for organizer's tournaments (after organizer is set)
       // This will be handled in a separate useEffect
       const allCoaches = extractData(coachesRes);
-      
+
       // For players, ensure we get all players - handle nested response structure
       // The backend returns: { success: true, count: X, data: [...] }
       // The service returns: response.data = { success: true, count: X, data: [...] }
@@ -272,7 +272,7 @@ const OrganizerDashboard = () => {
           allPlayersData = playersRes.data.data;
         }
       }
-      
+
       const allJudges = extractData(judgesRes);
 
       // Fetch current organizer profile
@@ -293,30 +293,30 @@ const OrganizerDashboard = () => {
       // Filter users to only show those registered for tournaments created by this organizer
       if (organizer) {
         const organizerId = organizer._id;
-        
+
         // Get all tournaments created by this organizer
         const organizerTournaments = extractData(tournamentsRes).filter(t => {
           const tournamentOrganizerId = t.organizer_id?._id || t.organizer_id;
-          return tournamentOrganizerId === organizerId || 
-                 tournamentOrganizerId?.toString() === organizerId?.toString();
+          return tournamentOrganizerId === organizerId ||
+            tournamentOrganizerId?.toString() === organizerId?.toString();
         });
-        
+
         // Get tournament IDs
         const organizerTournamentIds = organizerTournaments.map(t => t._id);
-        
+
         // Get all registrations for tournaments created by this organizer
         const organizerRegistrations = allRegistrations.filter(reg => {
           const regTournamentId = reg.tournament_id?._id || reg.tournament_id;
-          return organizerTournamentIds.some(tid => 
+          return organizerTournamentIds.some(tid =>
             tid === regTournamentId || tid?.toString() === regTournamentId?.toString()
           );
         });
-        
+
         // Extract unique IDs from registrations
         const registeredCoachIds = new Set();
         const registeredPlayerIds = new Set();
         const registeredJudgeIds = new Set();
-        
+
         organizerRegistrations.forEach(reg => {
           if (reg.coach_id) {
             const coachId = reg.coach_id?._id || reg.coach_id;
@@ -331,28 +331,28 @@ const OrganizerDashboard = () => {
             registeredJudgeIds.add(judgeId?.toString());
           }
         });
-        
+
         // Filter coaches to only show registered ones
         const filteredCoaches = allCoaches.filter(coach => {
           const coachId = coach._id?.toString();
           return registeredCoachIds.has(coachId);
         });
         setCoaches(filteredCoaches);
-        
+
         // Filter players to only show registered ones
         const filteredPlayers = allPlayersData.filter(player => {
           const playerId = player._id?.toString();
           return registeredPlayerIds.has(playerId);
         });
         setPlayers(filteredPlayers);
-        
+
         // Filter judges to only show registered ones
         const filteredJudges = allJudges.filter(judge => {
           const judgeId = judge._id?.toString();
           return registeredJudgeIds.has(judgeId);
         });
         setJudges(filteredJudges);
-        
+
       } else {
         // If organizer profile not found, show empty lists
         setCoaches([]);
@@ -362,7 +362,9 @@ const OrganizerDashboard = () => {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       if (showLoading) {
-        toast.error('Failed to load dashboard data');
+        if (error.response?.status !== 401) {
+          toast.error('Failed to load dashboard data');
+        }
       }
     } finally {
       if (showLoading) {
@@ -376,8 +378,8 @@ const OrganizerDashboard = () => {
     if (!currentOrganizer || !tournament) return false;
     const tournamentOrganizerId = tournament.organizer_id?._id || tournament.organizer_id;
     const currentOrganizerId = currentOrganizer._id;
-    return tournamentOrganizerId === currentOrganizerId || 
-           tournamentOrganizerId?.toString() === currentOrganizerId?.toString();
+    return tournamentOrganizerId === currentOrganizerId ||
+      tournamentOrganizerId?.toString() === currentOrganizerId?.toString();
   };
 
   // Calculate statistics - only for tournaments created by this organizer
@@ -385,30 +387,30 @@ const OrganizerDashboard = () => {
   const totalTournaments = organizerTournaments.length;
   const activeTournaments = organizerTournaments.filter(t => t.status === 'Open' || t.status === 'Ongoing').length;
   const draftTournaments = organizerTournaments.filter(t => t.status === 'Draft').length;
-  
+
   // Filter registrations to only those for organizer's tournaments
   const organizerRegistrations = currentOrganizer ? registrations.filter(r => {
     const regTournamentId = r.tournament_id?._id || r.tournament_id;
-    return organizerTournaments.some(t => 
+    return organizerTournaments.some(t =>
       t._id === regTournamentId || t._id?.toString() === regTournamentId?.toString()
     );
   }) : [];
-  
+
   const totalRegistrations = organizerRegistrations.length;
   const pendingRegistrations = organizerRegistrations.filter(r => r.approval_status === 'Pending').length;
   const approvedRegistrations = organizerRegistrations.filter(r => r.approval_status === 'Approved').length;
-  
+
   // Filter matches to only those for organizer's tournaments
   const organizerMatches = currentOrganizer ? matches.filter(m => {
     const matchTournamentId = m.tournament_id?._id || m.tournament_id;
-    return organizerTournaments.some(t => 
+    return organizerTournaments.some(t =>
       t._id === matchTournamentId || t._id?.toString() === matchTournamentId?.toString()
     );
   }) : [];
-  
+
   const totalMatches = organizerMatches.length;
-  const upcomingMatches = organizerMatches.filter(m => 
-    (m.status === 'Scheduled' || m.status === 'In Progress') && 
+  const upcomingMatches = organizerMatches.filter(m =>
+    (m.status === 'Scheduled' || m.status === 'In Progress') &&
     new Date(m.scheduled_time) > new Date()
   ).length;
   const completedMatches = organizerMatches.filter(m => m.status === 'Completed').length;
@@ -479,12 +481,12 @@ const OrganizerDashboard = () => {
       // The backend already fetches the latest registrations, but we'll ensure data is fresh
       // by reloading registrations first to show updated player count
       toast.info('Generating match draws with latest registered players...', { autoClose: 2000 });
-      
+
       const result = await matchService.generateDraws(tournamentId, categoryId, true);
-      
+
       if (result.success) {
         let message = `Match draws generated! Created ${result.data.matchesCreated || 0} matches.`;
-        
+
         // Add judge assignment information
         if (result.data.judgesAssigned) {
           const { totalJudges, judgesPerMatch, totalAssignments, unconfirmedJudges } = result.data.judgesAssigned;
@@ -496,12 +498,12 @@ const OrganizerDashboard = () => {
             message += ` No judges assigned to this event.`;
           }
         }
-        
+
         toast.success(message, { autoClose: 6000 });
-        
+
         // Reload all data to show new matches in Live Event Score tab
         await loadData(true);
-        
+
         // If we're on the Live Event Score tab, show a message
         if (activeTab === 'event-scoring') {
           toast.info('Matches are now available in Live Event Score tab', { autoClose: 3000 });
@@ -574,7 +576,7 @@ const OrganizerDashboard = () => {
   const handleOpenKataScoring = (performance) => {
     setSelectedKataPerformanceForScoring(performance);
     setSelectedJudgeForScoring(null);
-    
+
     // Initialize scores for all judges (if they already have scores, pre-fill them)
     const initialScores = {};
     if (performance.scores && performance.scores.length > 0) {
@@ -586,7 +588,7 @@ const OrganizerDashboard = () => {
       });
     }
     setKataScoresByJudge(initialScores);
-    
+
     setScoringData({
       kata_score: '',
       comments: ''
@@ -597,19 +599,19 @@ const OrganizerDashboard = () => {
   const handleOpenKataBulkScoring = (category, round = 'First Round') => {
     setSelectedCategoryForBulkScoring(category);
     setSelectedRoundForBulkScoring(round);
-    
+
     // Load performances for this category and round
     const roundPerformances = kataPerformances.filter(p => {
       const perfCategoryId = p.category_id?._id || p.category_id;
       return String(perfCategoryId) === String(category._id) && p.round === round;
     });
-    
+
     // Initialize scores for all performances
     const initialBulkScores = {};
     roundPerformances.forEach(perf => {
       const perfId = String(perf._id);
       initialBulkScores[perfId] = {};
-      
+
       if (perf.scores && perf.scores.length > 0) {
         perf.scores.forEach(score => {
           const judgeId = score.judge_id?._id || score.judge_id;
@@ -619,7 +621,7 @@ const OrganizerDashboard = () => {
         });
       }
     });
-    
+
     setKataBulkScores(initialBulkScores);
     setShowKataBulkScoringModal(true);
   };
@@ -632,18 +634,18 @@ const OrganizerDashboard = () => {
 
     try {
       const isKumite = selectedMatchForScoring.match_type === 'Kumite' || selectedMatchForScoring.match_type === 'Team Kumite';
-      
+
       let technicalScore = 0;
       let performanceScore = 0;
 
       if (isKumite) {
         // Calculate with Yuko (1), Waza-ari (2), Ippon (3)
         const points = (scoreData.yuko || 0) * 1 + (scoreData.waza_ari || 0) * 2 + (scoreData.ippon || 0) * 3;
-        const penaltyDeduction = (scoreData.chukoku || 0) * 0.5 + 
-                                 (scoreData.keikoku || 0) * 1 + 
-                                 (scoreData.hansoku_chui || 0) * 1.5 + 
-                                 (scoreData.hansoku || 0) * 2 +
-                                 (scoreData.jogai || 0) * 0.25;
+        const penaltyDeduction = (scoreData.chukoku || 0) * 0.5 +
+          (scoreData.keikoku || 0) * 1 +
+          (scoreData.hansoku_chui || 0) * 1.5 +
+          (scoreData.hansoku || 0) * 2 +
+          (scoreData.jogai || 0) * 0.25;
         technicalScore = Math.max(0, Math.min(10, points - penaltyDeduction));
         performanceScore = technicalScore;
       } else {
@@ -786,12 +788,12 @@ const OrganizerDashboard = () => {
       console.error('Error saving player scores:', error);
       console.error('Error response:', error.response);
       console.error('Error response data:', error.response?.data);
-      
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          error.message || 
-                          'Failed to save scores';
-      
+
+      const errorMessage = error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to save scores';
+
       toast.error(errorMessage);
       return false;
     }
@@ -803,41 +805,41 @@ const OrganizerDashboard = () => {
     try {
       // First, reload performances to get the latest saved scores
       await loadData(false);
-      
+
       // Wait a bit for data to load
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Get current performances to check which scores are already saved
       const currentPerformances = await kataPerformanceService.getPerformances({
         category_id: selectedCategoryForBulkScoring._id,
         round: selectedRoundForBulkScoring
       });
-      
+
       // Save any unsaved scores (scores in kataBulkScores that don't match saved scores)
       const unsavedScores = [];
       Object.entries(kataBulkScores).forEach(([performanceId, scores]) => {
         if (!scores || Object.keys(scores).length === 0) return;
-        
+
         // Find the performance
         const performance = currentPerformances.data.find(p => String(p._id) === performanceId);
         if (!performance) return;
-        
+
         // Check if any scores are different from saved scores
         const hasUnsavedChanges = Object.entries(scores).some(([judgeId, scoreValue]) => {
           if (!scoreValue || scoreValue.trim() === '') return false;
-          
+
           // Check if this score is already saved
           const savedScore = performance.scores?.find(s => {
             const sJudgeId = s.judge_id?._id || s.judge_id;
             return String(sJudgeId) === judgeId;
           });
-          
+
           // If no saved score or saved score is different, it's unsaved
           if (!savedScore) return true;
           const savedValue = savedScore.kata_score?.toString() || '';
           return savedValue !== scoreValue.trim();
         });
-        
+
         if (hasUnsavedChanges) {
           unsavedScores.push([performanceId, scores]);
         }
@@ -849,32 +851,32 @@ const OrganizerDashboard = () => {
           handleSavePlayerScores(performanceId, scores)
         );
         const results = await Promise.all(savePromises);
-        
+
         if (!results.every(r => r === true)) {
           toast.error('Some scores failed to save. Please check and try again.');
           return;
         }
-        
+
         // Wait a bit for scores to be saved and calculated
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       // Reload performances again to get updated final scores
       await loadData(false);
-      
+
       // Wait a bit for backend to calculate final scores
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Get updated performances with final scores
       const updatedPerformances = await kataPerformanceService.getPerformances({
         category_id: selectedCategoryForBulkScoring._id,
         round: selectedRoundForBulkScoring
       });
-      
+
       // Determine next round and top performers
       let nextRound = null;
       let topCount = 0;
-      
+
       if (selectedRoundForBulkScoring === 'First Round') {
         nextRound = 'Second Round (Final 8)';
         topCount = 8;
@@ -921,10 +923,10 @@ const OrganizerDashboard = () => {
         });
 
         if (createResponse.success) {
-        toast.success(`Round finalized! Top ${topCount} players advanced to ${nextRound}`);
-        setShowKataBulkScoringModal(false);
-        setSelectedCategoryForBulkScoring(null);
-        setKataBulkScores({});
+          toast.success(`Round finalized! Top ${topCount} players advanced to ${nextRound}`);
+          setShowKataBulkScoringModal(false);
+          setSelectedCategoryForBulkScoring(null);
+          setKataBulkScores({});
           await loadData(false);
         } else {
           toast.error(createResponse.message || 'Failed to create performances for next round');
@@ -936,7 +938,7 @@ const OrganizerDashboard = () => {
             selectedCategoryForBulkScoring._id,
             selectedRoundForBulkScoring
           );
-          
+
           if (rankingResponse.success) {
             toast.success('Round finalized! Rankings assigned: 1st, 2nd, 3rd, 3rd place');
           } else {
@@ -946,7 +948,7 @@ const OrganizerDashboard = () => {
           console.error('Error assigning rankings:', rankingError);
           toast.warning('Round finalized, but rankings could not be assigned. Please try again.');
         }
-        
+
         setShowKataBulkScoringModal(false);
         setSelectedCategoryForBulkScoring(null);
         setKataBulkScores({});
@@ -965,10 +967,10 @@ const OrganizerDashboard = () => {
         response: error.response,
         data: error.response?.data
       });
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          error.message || 
-                          'Failed to finalize round';
+      const errorMessage = error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to finalize round';
       toast.error(errorMessage);
     }
   };
@@ -994,857 +996,661 @@ const OrganizerDashboard = () => {
           }}
         />
       )}
-      
+
       <Layout>
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-indigo-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
-                  Organizer Dashboard
-                </h1>
-                <p className="text-gray-600">
-                  Welcome back, {user?.first_name || user?.username}! Manage your tournaments and events
-                </p>
-              </div>
-              <button
-                onClick={() => setShowCreateTournament(true)}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
-              >
-                <FiPlus className="w-5 h-5" />
-                Create Tournament
-              </button>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex space-x-2 border-b border-gray-200 overflow-x-auto">
-              {[
-                { id: 'overview', label: 'Overview', icon: FiBarChart2 },
-                { id: 'tournaments', label: 'Tournaments', icon: FiAward },
-                { id: 'registrations', label: 'Registrations', icon: FiUsers },
-                { id: 'users', label: 'Users', icon: FiUsers },
-                { id: 'draws', label: 'Match Draws', icon: FiTarget },
-                { id: 'schedule', label: 'Schedule', icon: FiCalendar },
-                { id: 'judges', label: 'Judges', icon: FiUser },
-                { id: 'event-scoring', label: 'Live Event Score', icon: FiEdit },
-                { id: 'results', label: 'Results', icon: FiGift },
-                { id: 'notifications', label: 'Notifications', icon: FiBell }
-              ].map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${
-                      activeTab === tab.id
-                        ? 'border-b-2 border-blue-600 text-blue-600'
-                        : 'text-gray-600 hover:text-gray-800'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Overview Tab */}
-          {activeTab === 'overview' && (
-            <>
-              {/* Statistics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
-              <div className="flex items-center justify-between">
+          <div className="max-w-7xl mx-auto">
+            {/* Header */}
+            <div className="mb-8">
+              <div className="flex justify-between items-center mb-4">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">Total Tournaments</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">{totalTournaments}</p>
-                  <p className="text-xs text-gray-500 mt-1">{activeTournaments} Active</p>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
+                    Organizer Dashboard
+                  </h1>
+                  <p className="text-gray-600">
+                    Welcome back, {user?.first_name || user?.username}! Manage your tournaments and events
+                  </p>
                 </div>
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <FiAward className="w-8 h-8 text-blue-600" />
-                </div>
-              </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
-              <div className="flex items-center justify-between">
-                <div>
-                      <p className="text-gray-500 text-sm font-medium">Pending Approvals</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">{pendingRegistrations}</p>
-                      <p className="text-xs text-gray-500 mt-1">{approvedRegistrations} Approved</p>
-                </div>
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <FiUsers className="w-8 h-8 text-green-600" />
-                </div>
-              </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
-              <div className="flex items-center justify-between">
-                <div>
-                      <p className="text-gray-500 text-sm font-medium">Upcoming Matches</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">{upcomingMatches}</p>
-                      <p className="text-xs text-gray-500 mt-1">{completedMatches} Completed</p>
-                </div>
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <FiCalendar className="w-8 h-8 text-purple-600" />
-                </div>
-              </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-yellow-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
-                  <p className="text-3xl font-bold text-gray-800 mt-2">Rs {totalRevenue.toFixed(2)}</p>
-                  <p className="text-xs text-gray-500 mt-1">From Paid Registrations</p>
-                </div>
-                <div className="p-3 bg-yellow-100 rounded-lg">
-                  <FiDollarSign className="w-8 h-8 text-yellow-600" />
-                </div>
-              </div>
-                </div>
-              </div>
-
-              {/* User Statistics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500 hover:shadow-xl transition cursor-pointer" onClick={() => setActiveTab('users')}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-sm font-medium">Total Coaches</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">{totalCoaches}</p>
-                      <p className="text-xs text-gray-500 mt-1">Registered coaches</p>
-                    </div>
-                    <div className="p-3 bg-green-100 rounded-lg">
-                      <FiUser className="w-8 h-8 text-green-600" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500 hover:shadow-xl transition cursor-pointer" onClick={() => setActiveTab('users')}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-sm font-medium">Total Players</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">{totalPlayers}</p>
-                      <p className="text-xs text-gray-500 mt-1">Registered players</p>
-                    </div>
-                    <div className="p-3 bg-purple-100 rounded-lg">
-                      <FiUsers className="w-8 h-8 text-purple-600" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500 hover:shadow-xl transition cursor-pointer" onClick={() => setActiveTab('users')}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-gray-500 text-sm font-medium">Total Judges</p>
-                      <p className="text-3xl font-bold text-gray-800 mt-2">{totalJudges}</p>
-                      <p className="text-xs text-gray-500 mt-1">Registered judges</p>
-                    </div>
-                    <div className="p-3 bg-orange-100 rounded-lg">
-                      <FiUser className="w-8 h-8 text-orange-600" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                  <button
-                    onClick={() => setShowCreateTournament(true)}
-                    className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition"
-                  >
-                    <FiPlus className="w-8 h-8 text-gray-400 mb-2" />
-                    <span className="font-semibold text-gray-700">Create Tournament</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/organizer/events')}
-                    className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition"
-                  >
-                    <FiAward className="w-8 h-8 text-gray-400 mb-2" />
-                    <span className="font-semibold text-gray-700">Manage Events</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('registrations')}
-                    className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-green-500 hover:bg-green-50 transition"
-                  >
-                    <FiCheckCircle className="w-8 h-8 text-gray-400 mb-2" />
-                    <span className="font-semibold text-gray-700">Approve Registrations</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('draws')}
-                    className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition"
-                  >
-                    <FiTarget className="w-8 h-8 text-gray-400 mb-2" />
-                    <span className="font-semibold text-gray-700">Generate Match Draws</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('schedule')}
-                    className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-cyan-500 hover:bg-cyan-50 transition"
-                  >
-                    <FiCalendar className="w-8 h-8 text-gray-400 mb-2" />
-                    <span className="font-semibold text-gray-700">Set Schedule</span>
-                  </button>
-                </div>
-          </div>
-
-          {/* Recent Tournaments */}
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold text-gray-800">My Tournaments</h2>
-                <button
-                    onClick={() => setActiveTab('tournaments')}
-                    className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                >
-                    View All <FiArrowRight />
-                </button>
-            </div>
-            {tournaments.length === 0 ? (
-              <div className="text-center py-12">
-                <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments Yet</h3>
-                    <p className="text-gray-600 mb-4">Create your first tournament to get started</p>
-                <button
-                      onClick={() => setShowCreateTournament(true)}
-                      className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition"
-                >
-                  Create Tournament
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {organizerTournaments.slice(0, 6).map((tournament) => (
-                      <TournamentCard
-                    key={tournament._id}
-                        tournament={tournament}
-                        registrations={organizerRegistrations}
-                        matches={organizerMatches}
-                        onViewDetails={() => {
-                          setSelectedTournamentId(tournament._id);
-                        }}
-                        onGenerateDraws={() => handleGenerateDraws(tournament._id)}
-                        onPublishBrackets={() => handlePublishBrackets(tournament._id)}
-                        onCloseTournament={() => handleCloseTournament(tournament._id)}
-                        isOwner={isTournamentOwner(tournament)}
-                      />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Pending Registrations */}
-              {pendingRegistrations > 0 && (
-                <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-yellow-200">
-            <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                        <FiClock className="w-6 h-6 text-yellow-600" />
-                        Pending Registrations
-                      </h2>
-                      <p className="text-gray-600 text-sm mt-1">
-                        {pendingRegistrations} registration{pendingRegistrations !== 1 ? 's' : ''} awaiting approval
-                      </p>
-                    </div>
-              <button
-                      onClick={() => setActiveTab('registrations')}
-                      className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-              >
-                      Review All <FiArrowRight />
-              </button>
-            </div>
-              <div className="space-y-3">
-                {organizerRegistrations
-                  .filter(r => r.approval_status === 'Pending')
-                  .slice(0, 5)
-                      .map((registration) => (
-                        <RegistrationApprovalCard
-                          key={registration._id}
-                          registration={registration}
-                          tournaments={organizerTournaments}
-                          onApprove={() => handleApproveRegistration(registration._id)}
-                          onReject={() => handleRejectRegistration(registration._id)}
-                        />
-                      ))}
-                  </div>
-                </div>
-              )}
-
-
-              {/* Upcoming Matches */}
-              {upcomingMatches > 0 && (
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold text-gray-800">Upcoming Matches</h2>
-                    <button
-                      onClick={() => setActiveTab('schedule')}
-                      className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                    >
-                      View Schedule <FiArrowRight />
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {matches
-                      .filter(m => (m.status === 'Scheduled' || m.status === 'In Progress') && new Date(m.scheduled_time) > new Date())
-                      .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time))
-                      .slice(0, 5)
-                      .map((match) => (
-                        <MatchCard
-                          key={match._id}
-                          match={match}
-                          tournaments={tournaments}
-                          onViewDetails={() => setSelectedMatch(match._id)}
-                        />
-                      ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Tournaments Tab */}
-          {activeTab === 'tournaments' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Tournament Management</h2>
                 <button
                   onClick={() => setShowCreateTournament(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
                 >
                   <FiPlus className="w-5 h-5" />
                   Create Tournament
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {organizerTournaments.map((tournament) => (
-                  <TournamentCard
-                    key={tournament._id}
-                    tournament={tournament}
-                    registrations={organizerRegistrations}
-                    matches={organizerMatches}
-                    onViewDetails={() => {
-                      setSelectedTournamentId(tournament._id);
-                    }}
-                    onGenerateDraws={() => handleGenerateDraws(tournament._id)}
-                    onPublishBrackets={() => handlePublishBrackets(tournament._id)}
-                    onCloseTournament={() => handleCloseTournament(tournament._id)}
-                    isOwner={isTournamentOwner(tournament)}
-                  />
-                ))}
+
+              {/* Tabs */}
+              <div className="flex space-x-2 border-b border-gray-200 overflow-x-auto">
+                {[
+                  { id: 'overview', label: 'Overview', icon: FiBarChart2 },
+                  { id: 'tournaments', label: 'Tournaments', icon: FiAward },
+                  { id: 'registrations', label: 'Registrations', icon: FiUsers },
+                  { id: 'users', label: 'Users', icon: FiUsers },
+                  { id: 'draws', label: 'Match Draws', icon: FiTarget },
+                  { id: 'schedule', label: 'Schedule', icon: FiCalendar },
+                  { id: 'judges', label: 'Judges', icon: FiUser },
+                  { id: 'event-scoring', label: 'Live Event Score', icon: FiEdit },
+                  
+                  { id: 'notifications', label: 'Notifications', icon: FiBell }
+                ].map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${activeTab === tab.id
+                          ? 'border-b-2 border-blue-600 text-blue-600'
+                          : 'text-gray-600 hover:text-gray-800'
+                        }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          )}
 
-          {/* Registrations Tab */}
-          {activeTab === 'registrations' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Approve Registrations</h2>
-                <div className="flex items-center gap-2">
-                  <select className="px-4 py-2 border border-gray-300 rounded-lg">
-                    <option value="all">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+            {/* Overview Tab */}
+            {activeTab === 'overview' && (
+              <>
+                {/* Statistics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Total Tournaments</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{totalTournaments}</p>
+                        <p className="text-xs text-gray-500 mt-1">{activeTournaments} Active</p>
+                      </div>
+                      <div className="p-3 bg-blue-100 rounded-lg">
+                        <FiAward className="w-8 h-8 text-blue-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Pending Approvals</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{pendingRegistrations}</p>
+                        <p className="text-xs text-gray-500 mt-1">{approvedRegistrations} Approved</p>
+                      </div>
+                      <div className="p-3 bg-green-100 rounded-lg">
+                        <FiUsers className="w-8 h-8 text-green-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Upcoming Matches</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{upcomingMatches}</p>
+                        <p className="text-xs text-gray-500 mt-1">{completedMatches} Completed</p>
+                      </div>
+                      <div className="p-3 bg-purple-100 rounded-lg">
+                        <FiCalendar className="w-8 h-8 text-purple-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-yellow-500">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">Rs {totalRevenue.toFixed(2)}</p>
+                        <p className="text-xs text-gray-500 mt-1">From Paid Registrations</p>
+                      </div>
+                      <div className="p-3 bg-yellow-100 rounded-lg">
+                        <FiDollarSign className="w-8 h-8 text-yellow-600" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              {organizerRegistrations.length === 0 ? (
-                <div className="text-center py-12">
-                  <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">No Registrations</h3>
-                  <p className="text-gray-600">No registrations have been submitted yet for your tournaments</p>
+
+                {/* User Statistics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500 hover:shadow-xl transition cursor-pointer" onClick={() => setActiveTab('users')}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Total Coaches</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{totalCoaches}</p>
+                        <p className="text-xs text-gray-500 mt-1">Registered coaches</p>
+                      </div>
+                      <div className="p-3 bg-green-100 rounded-lg">
+                        <FiUser className="w-8 h-8 text-green-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500 hover:shadow-xl transition cursor-pointer" onClick={() => setActiveTab('users')}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Total Players</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{totalPlayers}</p>
+                        <p className="text-xs text-gray-500 mt-1">Registered players</p>
+                      </div>
+                      <div className="p-3 bg-purple-100 rounded-lg">
+                        <FiUsers className="w-8 h-8 text-purple-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500 hover:shadow-xl transition cursor-pointer" onClick={() => setActiveTab('users')}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-gray-500 text-sm font-medium">Total Judges</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{totalJudges}</p>
+                        <p className="text-xs text-gray-500 mt-1">Registered judges</p>
+                      </div>
+                      <div className="p-3 bg-orange-100 rounded-lg">
+                        <FiUser className="w-8 h-8 text-orange-600" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {organizerRegistrations.map((registration) => (
-                    <RegistrationApprovalCard
-                      key={registration._id}
-                      registration={registration}
-                      tournaments={organizerTournaments}
-                      onApprove={() => handleApproveRegistration(registration._id)}
-                      onReject={() => handleRejectRegistration(registration._id)}
+
+                {/* Quick Actions */}
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">Quick Actions</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <button
+                      onClick={() => setShowCreateTournament(true)}
+                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition"
+                    >
+                      <FiPlus className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="font-semibold text-gray-700">Create Tournament</span>
+                    </button>
+                    <button
+                      onClick={() => navigate('/organizer/events')}
+                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition"
+                    >
+                      <FiAward className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="font-semibold text-gray-700">Manage Events</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('registrations')}
+                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-green-500 hover:bg-green-50 transition"
+                    >
+                      <FiCheckCircle className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="font-semibold text-gray-700">Approve Registrations</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('draws')}
+                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition"
+                    >
+                      <FiTarget className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="font-semibold text-gray-700">Generate Match Draws</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('schedule')}
+                      className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-cyan-500 hover:bg-cyan-50 transition"
+                    >
+                      <FiCalendar className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="font-semibold text-gray-700">Set Schedule</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Recent Tournaments */}
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-gray-800">My Tournaments</h2>
+                    <button
+                      onClick={() => setActiveTab('tournaments')}
+                      className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    >
+                      View All <FiArrowRight />
+                    </button>
+                  </div>
+                  {tournaments.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments Yet</h3>
+                      <p className="text-gray-600 mb-4">Create your first tournament to get started</p>
+                      <button
+                        onClick={() => setShowCreateTournament(true)}
+                        className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-2 rounded-lg hover:from-blue-700 hover:to-cyan-700 transition"
+                      >
+                        Create Tournament
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {organizerTournaments.slice(0, 6).map((tournament) => (
+                        <TournamentCard
+                          key={tournament._id}
+                          tournament={tournament}
+                          registrations={organizerRegistrations}
+                          matches={organizerMatches}
+                          onViewDetails={() => {
+                            setSelectedTournamentId(tournament._id);
+                          }}
+                          onGenerateDraws={() => handleGenerateDraws(tournament._id)}
+                          onPublishBrackets={() => handlePublishBrackets(tournament._id)}
+                          onCloseTournament={() => handleCloseTournament(tournament._id)}
+                          isOwner={isTournamentOwner(tournament)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pending Registrations */}
+                {pendingRegistrations > 0 && (
+                  <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-yellow-200">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                          <FiClock className="w-6 h-6 text-yellow-600" />
+                          Pending Registrations
+                        </h2>
+                        <p className="text-gray-600 text-sm mt-1">
+                          {pendingRegistrations} registration{pendingRegistrations !== 1 ? 's' : ''} awaiting approval
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('registrations')}
+                        className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                      >
+                        Review All <FiArrowRight />
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {organizerRegistrations
+                        .filter(r => r.approval_status === 'Pending')
+                        .slice(0, 5)
+                        .map((registration) => (
+                          <RegistrationApprovalCard
+                            key={registration._id}
+                            registration={registration}
+                            tournaments={organizerTournaments}
+                            onApprove={() => handleApproveRegistration(registration._id)}
+                            onReject={() => handleRejectRegistration(registration._id)}
+                          />
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+
+                {/* Upcoming Matches */}
+                {upcomingMatches > 0 && (
+                  <div className="bg-white rounded-xl shadow-lg p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-2xl font-bold text-gray-800">Upcoming Matches</h2>
+                      <button
+                        onClick={() => setActiveTab('schedule')}
+                        className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                      >
+                        View Schedule <FiArrowRight />
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {matches
+                        .filter(m => (m.status === 'Scheduled' || m.status === 'In Progress') && new Date(m.scheduled_time) > new Date())
+                        .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time))
+                        .slice(0, 5)
+                        .map((match) => (
+                          <MatchCard
+                            key={match._id}
+                            match={match}
+                            tournaments={tournaments}
+                            onViewDetails={() => setSelectedMatch(match._id)}
+                          />
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Tournaments Tab */}
+            {activeTab === 'tournaments' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Tournament Management</h2>
+                  <button
+                    onClick={() => setShowCreateTournament(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <FiPlus className="w-5 h-5" />
+                    Create Tournament
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {organizerTournaments.map((tournament) => (
+                    <TournamentCard
+                      key={tournament._id}
+                      tournament={tournament}
+                      registrations={organizerRegistrations}
+                      matches={organizerMatches}
+                      onViewDetails={() => {
+                        setSelectedTournamentId(tournament._id);
+                      }}
+                      onGenerateDraws={() => handleGenerateDraws(tournament._id)}
+                      onPublishBrackets={() => handlePublishBrackets(tournament._id)}
+                      onCloseTournament={() => handleCloseTournament(tournament._id)}
+                      isOwner={isTournamentOwner(tournament)}
                     />
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Users Tab - View All Coaches, Players, and Judges */}
-          {activeTab === 'users' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">All Users</h2>
-                  <p className="text-sm text-gray-600 mt-1">View coaches, players, and judges registered for your tournaments</p>
-                </div>
-              </div>
-
-              {/* Filter and Search */}
-              <div className="mb-6 flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="Search by name, email, or username..."
-                      value={userSearchTerm}
-                      onChange={(e) => setUserSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setUserFilterType('all')}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      userFilterType === 'all'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    All ({coaches.length + players.length + judges.length})
-                  </button>
-                  <button
-                    onClick={() => setUserFilterType('coaches')}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      userFilterType === 'coaches'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Coaches ({coaches.length})
-                  </button>
-                  <button
-                    onClick={() => setUserFilterType('players')}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      userFilterType === 'players'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Players ({players.length})
-                  </button>
-                  <button
-                    onClick={() => setUserFilterType('judges')}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      userFilterType === 'judges'
-                        ? 'bg-orange-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Judges ({judges.length})
-                  </button>
-                </div>
-              </div>
-
-              {/* Users List */}
-              <div className="space-y-4">
-                {/* Coaches */}
-                {(userFilterType === 'all' || userFilterType === 'coaches') && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <FiUser className="w-5 h-5 text-green-600" />
-                      Coaches ({coaches.length})
-                    </h3>
-                    {coaches.length === 0 ? (
-                      <p className="text-gray-500 text-sm">No coaches registered</p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {coaches
-                          .filter(coach => {
-                            if (!userSearchTerm) return true;
-                            const searchLower = userSearchTerm.toLowerCase();
-                            const user = coach.user_id || {};
-                            const name = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
-                            return (
-                              name.includes(searchLower) ||
-                              user.username?.toLowerCase().includes(searchLower) ||
-                              user.email?.toLowerCase().includes(searchLower) ||
-                              coach.dojo?.dojo_name?.toLowerCase().includes(searchLower)
-                            );
-                          })
-                          .map((coach) => {
-                            const user = coach.user_id || {};
-                            return (
-                              <div key={coach._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-gray-800">
-                                      {user.first_name && user.last_name
-                                        ? `${user.first_name} ${user.last_name}`
-                                        : user.username || 'Coach'}
-                                    </h4>
-                                    <p className="text-sm text-gray-600">{user.email}</p>
-                                  </div>
-                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                                    Coach
-                                  </span>
-                                </div>
-                                {coach.dojo && (
-                                  <div className="mt-2 pt-2 border-t border-gray-100">
-                                    <p className="text-xs text-gray-600">
-                                      <span className="font-medium">Dojo:</span> {coach.dojo.dojo_name}
-                                    </p>
-                                  </div>
-                                )}
-                                {coach.certification_level && (
-                                  <p className="text-xs text-gray-600 mt-1">
-                                    <span className="font-medium">Certification:</span> {coach.certification_level}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Players */}
-                {(userFilterType === 'all' || userFilterType === 'players') && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <FiUsers className="w-5 h-5 text-purple-600" />
-                      Players ({players.length})
-                    </h3>
-                    {players.length === 0 ? (
-                      <p className="text-gray-500 text-sm">No players registered</p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {players
-                          .filter(player => {
-                            if (!userSearchTerm) return true;
-                            const searchLower = userSearchTerm.toLowerCase();
-                            const user = player.user_id || {};
-                            const name = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
-                            return (
-                              name.includes(searchLower) ||
-                              user.username?.toLowerCase().includes(searchLower) ||
-                              user.email?.toLowerCase().includes(searchLower) ||
-                              player.dojo_name?.toLowerCase().includes(searchLower) ||
-                              player.coach_name?.toLowerCase().includes(searchLower)
-                            );
-                          })
-                          .map((player) => {
-                            const user = player.user_id || {};
-                            return (
-                              <div key={player._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-gray-800">
-                                      {user.first_name && user.last_name
-                                        ? `${user.first_name} ${user.last_name}`
-                                        : user.username || 'Player'}
-                                    </h4>
-                                    <p className="text-sm text-gray-600">{user.email}</p>
-                                  </div>
-                                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
-                                    Player
-                                  </span>
-                                </div>
-                                {player.dojo_name && (
-                                  <p className="text-xs text-gray-600 mt-2">
-                                    <span className="font-medium">Dojo:</span> {player.dojo_name}
-                                  </p>
-                                )}
-                                {player.coach_name && (
-                                  <p className="text-xs text-gray-600">
-                                    <span className="font-medium">Coach:</span> {player.coach_name}
-                                  </p>
-                                )}
-                                {player.belt_rank && (
-                                  <p className="text-xs text-gray-600">
-                                    <span className="font-medium">Belt:</span> {player.belt_rank}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Judges */}
-                {(userFilterType === 'all' || userFilterType === 'judges') && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <FiUser className="w-5 h-5 text-orange-600" />
-                      Judges ({judges.length})
-                    </h3>
-                    {judges.length === 0 ? (
-                      <p className="text-gray-500 text-sm">No judges registered</p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {judges
-                          .filter(judge => {
-                            if (!userSearchTerm) return true;
-                            const searchLower = userSearchTerm.toLowerCase();
-                            const user = judge.user_id || {};
-                            const name = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
-                            return (
-                              name.includes(searchLower) ||
-                              user.username?.toLowerCase().includes(searchLower) ||
-                              user.email?.toLowerCase().includes(searchLower)
-                            );
-                          })
-                          .map((judge) => {
-                            const user = judge.user_id || {};
-                            return (
-                              <div key={judge._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-gray-800">
-                                      {user.first_name && user.last_name
-                                        ? `${user.first_name} ${user.last_name}`
-                                        : user.username || 'Judge'}
-                                    </h4>
-                                    <p className="text-sm text-gray-600">{user.email}</p>
-                                  </div>
-                                  <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-semibold">
-                                    Judge
-                                  </span>
-                                </div>
-                                {judge.certification_level && (
-                                  <p className="text-xs text-gray-600 mt-2">
-                                    <span className="font-medium">Certification:</span> {judge.certification_level}
-                                  </p>
-                                )}
-                                {judge.experience_years && (
-                                  <p className="text-xs text-gray-600">
-                                    <span className="font-medium">Experience:</span> {judge.experience_years} years
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Empty State */}
-                {userFilterType === 'all' && coaches.length === 0 && players.length === 0 && judges.length === 0 && (
-                  <div className="text-center py-12">
-                    <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Users Found</h3>
-                    <p className="text-gray-600">No users have registered in the system yet</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Match Draws Tab */}
-          {activeTab === 'draws' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Generate AI Match Draws</h2>
-                <button
-                  onClick={() => navigate('/organizer/draws')}
-                  className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                >
-                  Advanced Draws <FiArrowRight />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {organizerTournaments
-                  .filter(t => t.status === 'Open' || t.status === 'Ongoing')
-                  .map((tournament) => {
-                    const tournamentCategories = categories.filter(c => {
-                      const catTournamentId = c.tournament_id?._id || c.tournament_id;
-                      return catTournamentId === tournament._id || catTournamentId?.toString() === tournament._id?.toString();
-                    });
-                    const tournamentMatches = organizerMatches.filter(m => {
-                      const matchTournamentId = m.tournament_id?._id || m.tournament_id;
-                      return matchTournamentId === tournament._id || matchTournamentId?.toString() === tournament._id?.toString();
-                    });
-
-                    return (
-                      <div key={tournament._id} className="border border-gray-200 rounded-xl p-6">
-                        <h3 className="font-bold text-lg text-gray-800 mb-4">{tournament.tournament_name}</h3>
-                        <div className="space-y-3">
-                          {tournamentCategories.map((category) => (
-                            <div key={category._id} className="bg-gray-50 rounded-lg p-4">
-                              <div className="flex justify-between items-center mb-2">
-                          <div>
-                                  <p className="font-semibold text-gray-800">{category.category_name}</p>
-                            <p className="text-sm text-gray-600">
-                                    {category.match_type} • {category.age_group || 'All Ages'}
-                            </p>
-                          </div>
-                                <span className="text-xs text-gray-500">
-                                  {tournamentMatches.filter(m => {
-                                    const matchCategoryId = m.category_id?._id || m.category_id;
-                                    return matchCategoryId === category._id || matchCategoryId?.toString() === category._id?.toString();
-                                  }).length} Matches
-                          </span>
-                              </div>
-                              {isTournamentOwner(tournament) && (
-                                <button
-                                  onClick={() => handleGenerateDraws(tournament._id, category._id)}
-                                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
-                                >
-                                  Generate AI Draws
-                                </button>
-                              )}
-                              {!isTournamentOwner(tournament) && (
-                                <p className="text-sm text-gray-500 text-center py-2">
-                                  View only - Not your tournament
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
               </div>
             )}
 
-          {/* Schedule Tab */}
-          {activeTab === 'schedule' && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Set Schedule & Tatami Numbers</h2>
-              <button
-                onClick={() => navigate('/organizer/schedule')}
-                  className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-              >
-                  Calendar View <FiArrowRight />
-              </button>
-              </div>
-              <div className="space-y-4">
-                {organizerMatches
-                  .filter(m => m.status === 'Scheduled' || m.status === 'In Progress')
-                  .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time))
-                  .map((match) => (
-                    <MatchScheduleCard
-                      key={match._id}
-                      match={match}
-                      tournaments={organizerTournaments}
-                      onEdit={() => setSelectedMatch(match._id)}
-                    />
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* Judges Tab */}
-          {activeTab === 'judges' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Assign Judges to Events</h2>
-                <button
-                  onClick={() => navigate('/organizer/events')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  <FiSettings className="w-5 h-5" />
-                  Manage Events & Assign Judges
-                </button>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-                <p className="text-blue-800 mb-2">
-                  <strong>How to Assign Judges:</strong>
-                </p>
-                <p className="text-blue-700 text-sm mb-4">
-                  Judges are assigned to events (categories), not individual matches. When you assign judges to an event, 
-                  they will automatically judge all matches in that event.
-                </p>
-                <ol className="text-blue-700 text-sm space-y-2 list-decimal list-inside">
-                  <li>Go to <strong>Event Management</strong> (click the button above or navigate via sidebar)</li>
-                  <li>Select a tournament and find the event you want to assign judges to</li>
-                  <li>Click the <strong>"Setup Tatami"</strong> button (⚙️ icon) on the event card</li>
-                  <li>Assign up to 5 judges to the event</li>
-                  <li>Judges will receive notifications and must confirm their assignment</li>
-                  <li>Once confirmed, judges will automatically be assigned to all matches in that event</li>
-                </ol>
-              </div>
-              <div className="space-y-4">
-                {categories.length === 0 ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+            {/* Registrations Tab */}
+            {activeTab === 'registrations' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Approve Registrations</h2>
+                  <div className="flex items-center gap-2">
+                    <select className="px-4 py-2 border border-gray-300 rounded-lg">
+                      <option value="all">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+                {organizerRegistrations.length === 0 ? (
+                  <div className="text-center py-12">
                     <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-2">No events created yet</p>
-                    <p className="text-sm text-gray-500 mb-4">Create events in Event Management to assign judges</p>
-                    <button
-                      onClick={() => navigate('/organizer/events')}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                    >
-                      Go to Event Management
-                    </button>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Registrations</h3>
+                    <p className="text-gray-600">No registrations have been submitted yet for your tournaments</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {categories.map((category) => {
-                      const categoryMatches = matches.filter(m => {
-                        const matchCategoryId = m.category_id?._id || m.category_id;
-                        return String(matchCategoryId) === String(category._id);
-                      });
-                      return (
-                        <div key={category._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                          <h3 className="font-semibold text-gray-800 mb-2">{category.category_name}</h3>
-                          <p className="text-sm text-gray-600 mb-2">
-                            {category.category_type} • {category.participation_type}
-                          </p>
-                          <p className="text-xs text-gray-500 mb-3">
-                            {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
-                          </p>
-                          <button
-                            onClick={() => navigate(`/organizer/events?tournament=${category.tournament_id?._id || category.tournament_id}`)}
-                            className="w-full text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                          >
-                            Setup Tatami & Assign Judges
-                          </button>
-                        </div>
-                      );
-                    })}
+                  <div className="space-y-3">
+                    {organizerRegistrations.map((registration) => (
+                      <RegistrationApprovalCard
+                        key={registration._id}
+                        registration={registration}
+                        tournaments={organizerTournaments}
+                        onApprove={() => handleApproveRegistration(registration._id)}
+                        onReject={() => handleRejectRegistration(registration._id)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Live Event Score Tab - Table Worker Scoring */}
-          {activeTab === 'event-scoring' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">Live Event Score</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Table workers can enter scores for matches based on judge marks shown in real tournaments
-                  </p>
+            {/* Users Tab - View All Coaches, Players, and Judges */}
+            {activeTab === 'users' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">All Users</h2>
+                    <p className="text-sm text-gray-600 mt-1">View coaches, players, and judges registered for your tournaments</p>
+                  </div>
                 </div>
-                <button
-                  onClick={() => loadData(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  <FiRefreshCw className="w-5 h-5" />
-                  Refresh
-                </button>
-              </div>
 
-              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
-                <p className="text-sm text-blue-800">
-                  <strong>How it works:</strong> Judges show their marks in real tournaments. Table workers enter these scores into the system here. 
-                  Each event has assigned judges. You can score matches and Kata performances for each event.
-                </p>
-              </div>
-
-              {organizerTournaments.length === 0 ? (
-                <div className="text-center py-12">
-                  <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments</h3>
-                  <p className="text-gray-600">Create tournaments and generate match draws to start scoring</p>
+                {/* Filter and Search */}
+                <div className="mb-6 flex flex-col md:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        placeholder="Search by name, email, or username..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setUserFilterType('all')}
+                      className={`px-4 py-2 rounded-lg font-semibold transition ${userFilterType === 'all'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      All ({coaches.length + players.length + judges.length})
+                    </button>
+                    <button
+                      onClick={() => setUserFilterType('coaches')}
+                      className={`px-4 py-2 rounded-lg font-semibold transition ${userFilterType === 'coaches'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      Coaches ({coaches.length})
+                    </button>
+                    <button
+                      onClick={() => setUserFilterType('players')}
+                      className={`px-4 py-2 rounded-lg font-semibold transition ${userFilterType === 'players'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      Players ({players.length})
+                    </button>
+                    <button
+                      onClick={() => setUserFilterType('judges')}
+                      className={`px-4 py-2 rounded-lg font-semibold transition ${userFilterType === 'judges'
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      Judges ({judges.length})
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-6">
+
+                {/* Users List */}
+                <div className="space-y-4">
+                  {/* Coaches */}
+                  {(userFilterType === 'all' || userFilterType === 'coaches') && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <FiUser className="w-5 h-5 text-green-600" />
+                        Coaches ({coaches.length})
+                      </h3>
+                      {coaches.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No coaches registered</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {coaches
+                            .filter(coach => {
+                              if (!userSearchTerm) return true;
+                              const searchLower = userSearchTerm.toLowerCase();
+                              const user = coach.user_id || {};
+                              const name = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
+                              return (
+                                name.includes(searchLower) ||
+                                user.username?.toLowerCase().includes(searchLower) ||
+                                user.email?.toLowerCase().includes(searchLower) ||
+                                coach.dojo?.dojo_name?.toLowerCase().includes(searchLower)
+                              );
+                            })
+                            .map((coach) => {
+                              const user = coach.user_id || {};
+                              return (
+                                <div key={coach._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-gray-800">
+                                        {user.first_name && user.last_name
+                                          ? `${user.first_name} ${user.last_name}`
+                                          : user.username || 'Coach'}
+                                      </h4>
+                                      <p className="text-sm text-gray-600">{user.email}</p>
+                                    </div>
+                                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                                      Coach
+                                    </span>
+                                  </div>
+                                  {coach.dojo && (
+                                    <div className="mt-2 pt-2 border-t border-gray-100">
+                                      <p className="text-xs text-gray-600">
+                                        <span className="font-medium">Dojo:</span> {coach.dojo.dojo_name}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {coach.certification_level && (
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      <span className="font-medium">Certification:</span> {coach.certification_level}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Players */}
+                  {(userFilterType === 'all' || userFilterType === 'players') && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <FiUsers className="w-5 h-5 text-purple-600" />
+                        Players ({players.length})
+                      </h3>
+                      {players.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No players registered</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {players
+                            .filter(player => {
+                              if (!userSearchTerm) return true;
+                              const searchLower = userSearchTerm.toLowerCase();
+                              const user = player.user_id || {};
+                              const name = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
+                              return (
+                                name.includes(searchLower) ||
+                                user.username?.toLowerCase().includes(searchLower) ||
+                                user.email?.toLowerCase().includes(searchLower) ||
+                                player.dojo_name?.toLowerCase().includes(searchLower) ||
+                                player.coach_name?.toLowerCase().includes(searchLower)
+                              );
+                            })
+                            .map((player) => {
+                              const user = player.user_id || {};
+                              return (
+                                <div key={player._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-gray-800">
+                                        {user.first_name && user.last_name
+                                          ? `${user.first_name} ${user.last_name}`
+                                          : user.username || 'Player'}
+                                      </h4>
+                                      <p className="text-sm text-gray-600">{user.email}</p>
+                                    </div>
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
+                                      Player
+                                    </span>
+                                  </div>
+                                  {player.dojo_name && (
+                                    <p className="text-xs text-gray-600 mt-2">
+                                      <span className="font-medium">Dojo:</span> {player.dojo_name}
+                                    </p>
+                                  )}
+                                  {player.coach_name && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="font-medium">Coach:</span> {player.coach_name}
+                                    </p>
+                                  )}
+                                  {player.belt_rank && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="font-medium">Belt:</span> {player.belt_rank}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Judges */}
+                  {(userFilterType === 'all' || userFilterType === 'judges') && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <FiUser className="w-5 h-5 text-orange-600" />
+                        Judges ({judges.length})
+                      </h3>
+                      {judges.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No judges registered</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {judges
+                            .filter(judge => {
+                              if (!userSearchTerm) return true;
+                              const searchLower = userSearchTerm.toLowerCase();
+                              const user = judge.user_id || {};
+                              const name = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
+                              return (
+                                name.includes(searchLower) ||
+                                user.username?.toLowerCase().includes(searchLower) ||
+                                user.email?.toLowerCase().includes(searchLower)
+                              );
+                            })
+                            .map((judge) => {
+                              const user = judge.user_id || {};
+                              return (
+                                <div key={judge._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-gray-800">
+                                        {user.first_name && user.last_name
+                                          ? `${user.first_name} ${user.last_name}`
+                                          : user.username || 'Judge'}
+                                      </h4>
+                                      <p className="text-sm text-gray-600">{user.email}</p>
+                                    </div>
+                                    <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-semibold">
+                                      Judge
+                                    </span>
+                                  </div>
+                                  {judge.certification_level && (
+                                    <p className="text-xs text-gray-600 mt-2">
+                                      <span className="font-medium">Certification:</span> {judge.certification_level}
+                                    </p>
+                                  )}
+                                  {judge.experience_years && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="font-medium">Experience:</span> {judge.experience_years} years
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Empty State */}
+                  {userFilterType === 'all' && coaches.length === 0 && players.length === 0 && judges.length === 0 && (
+                    <div className="text-center py-12">
+                      <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">No Users Found</h3>
+                      <p className="text-gray-600">No users have registered in the system yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Match Draws Tab */}
+            {activeTab === 'draws' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Generate AI Match Draws</h2>
+                  <button
+                    onClick={() => navigate('/organizer/draws')}
+                    className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                  >
+                    Advanced Draws <FiArrowRight />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {organizerTournaments
                     .filter(t => t.status === 'Open' || t.status === 'Ongoing')
                     .map((tournament) => {
@@ -1858,576 +1664,763 @@ const OrganizerDashboard = () => {
                       });
 
                       return (
-                        <div key={tournament._id} className="border border-gray-200 rounded-lg p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div>
-                              <h3 className="text-xl font-bold text-gray-800">{tournament.tournament_name}</h3>
-                              <p className="text-sm text-gray-600">
-                                {tournamentCategories.length} event{tournamentCategories.length !== 1 ? 's' : ''} • {tournamentMatches.length} match{tournamentMatches.length !== 1 ? 'es' : ''}
-                              </p>
-                            </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-                              tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {tournament.status}
-                            </span>
-                          </div>
-
-                          {tournamentCategories.length === 0 ? (
-                            <div className="text-center py-8 bg-gray-50 rounded-lg">
-                              <p className="text-gray-600">No events created yet. Create events to start scoring.</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              {tournamentCategories.map((category) => {
-                                const eventMatches = tournamentMatches.filter(m => {
-                                  const matchCategoryId = m.category_id?._id || m.category_id;
-                                  return matchCategoryId === category._id || matchCategoryId?.toString() === category._id?.toString();
-                                });
-                                const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
-
-                                return (
-                                  <div key={category._id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                                    <div className="flex items-start justify-between mb-4">
-                                      <div className="flex-1">
-                                        <h4 className="font-bold text-lg text-gray-800 mb-1">
-                                          {category.category_name}
-                                        </h4>
-                                        <p className="text-sm text-gray-600">
-                                          {category.category_type} • {category.participation_type}
-                                        </p>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                          {eventMatches.length} match{eventMatches.length !== 1 ? 'es' : ''}
-                                        </p>
-                                      </div>
-                                      <button
-                                        onClick={() => navigate(`/organizer/events?tournament=${tournament._id}`)}
-                                        className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition"
-                                      >
-                                        View Event
-                                      </button>
-                                    </div>
-
-                                    {/* Assigned Judges Section */}
-                                    <div className="mb-4">
-                                      <p className="text-sm font-semibold text-gray-700 mb-2">Assigned Judges:</p>
-                                      {(() => {
-                                        const eventTatami = tatamis.find(t => {
-                                          const tatamiCategoryId = t.category_id?._id || t.category_id;
-                                          return String(tatamiCategoryId) === String(category._id);
-                                        });
-                                        const assignedJudges = eventTatami?.assigned_judges || [];
-                                        const confirmedJudges = assignedJudges.filter(j => j.is_confirmed);
-                                        
-                                        return (
-                                          <div className="bg-white rounded p-3 border border-gray-200">
-                                            {confirmedJudges.length > 0 ? (
-                                              <div className="space-y-2">
-                                                {confirmedJudges.map((judgeAssignment, idx) => {
-                                                  const judge = judgeAssignment.judge_id || {};
-                                                  const judgeUser = judge.user_id || {};
-                                                  const judgeName = judgeUser.first_name && judgeUser.last_name
-                                                    ? `${judgeUser.first_name} ${judgeUser.last_name}`
-                                                    : judgeUser.username || `Judge ${idx + 1}`;
-                                                  return (
-                                                    <div key={idx} className="flex items-center justify-between text-xs">
-                                                      <span className="text-gray-700">{judgeName}</span>
-                                                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                                                        Confirmed
-                                                      </span>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            ) : (
-                                              <p className="text-xs text-gray-600">
-                                                No confirmed judges yet. Assign judges in Event Management.
-                                              </p>
-                                            )}
-                                            <button
-                                              onClick={() => navigate(`/organizer/events?tournament=${tournament._id}`)}
-                                              className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                                            >
-                                              View/Assign Judges →
-                                            </button>
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-
-                                    {/* Matches/Performances Section */}
-                                    {isKata ? (
-                                      <div>
-                                        <div className="flex items-center justify-between mb-3">
-                                          <p className="text-sm font-semibold text-gray-700">Kata Performances:</p>
-                                          <button
-                                            onClick={() => {
-                                              setSelectedCategoryForKataPerformance(category);
-                                              setShowKataPerformanceModal(true);
-                                            }}
-                                            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                                          >
-                                            Create Performances
-                                          </button>
-                                        </div>
-                                        {(() => {
-                                          const eventKataPerformances = kataPerformances.filter(p => {
-                                            const perfCategoryId = p.category_id?._id || p.category_id;
-                                            return String(perfCategoryId) === String(category._id);
-                                          });
-                                          
-                                          if (eventKataPerformances.length === 0) {
-                                            return (
-                                              <div className="bg-white rounded p-3 border border-gray-200">
-                                                <p className="text-xs text-gray-600 mb-2">
-                                                  No Kata performances created yet. Create performances to start scoring.
-                                                </p>
-                                              </div>
-                                            );
-                                          }
-                                          
-                                          // Group by round
-                                          const performancesByRound = {};
-                                          eventKataPerformances.forEach(perf => {
-                                            if (!performancesByRound[perf.round]) {
-                                              performancesByRound[perf.round] = [];
-                                            }
-                                            performancesByRound[perf.round].push(perf);
-                                          });
-                                          
-                                          const rounds = ['First Round', 'Second Round (Final 8)', 'Third Round (Final 4)'];
-                                          
-                                          return (
-                                            <div className="space-y-4">
-                                              {rounds.map(round => {
-                                                const roundPerformances = performancesByRound[round] || [];
-                                                if (roundPerformances.length === 0) return null;
-                                                
-                                                return (
-                                                  <div key={round} className="bg-white rounded-lg border border-gray-200 p-4">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                      <div>
-                                                        <h5 className="text-sm font-bold text-gray-800">{round}</h5>
-                                                        <p className="text-xs text-gray-600">
-                                                          {roundPerformances.length} player{roundPerformances.length !== 1 ? 's' : ''}
-                                                        </p>
-                                                      </div>
-                                                      <button
-                                                        onClick={() => handleOpenKataBulkScoring(category, round)}
-                                                        className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition font-semibold"
-                                                      >
-                                                        Score All Players
-                                                      </button>
-                                                    </div>
-                                                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                                                      {roundPerformances
-                                                        .sort((a, b) => {
-                                                          if (a.final_score === null && b.final_score !== null) return 1;
-                                                          if (a.final_score !== null && b.final_score === null) return -1;
-                                                          if (a.final_score === null && b.final_score === null) return a.performance_order - b.performance_order;
-                                                          return b.final_score - a.final_score;
-                                                        })
-                                                        .map((performance) => {
-                                                          const playerName = performance.player_id?.user_id
-                                                            ? `${performance.player_id.user_id.first_name || ''} ${performance.player_id.user_id.last_name || ''}`.trim() || performance.player_id.user_id.username
-                                                            : 'Player';
-                                                          const scoresCount = performance.scores?.length || 0;
-                                                          return (
-                                                            <div key={performance._id} className="bg-gray-50 rounded p-2 border border-gray-200 flex items-center justify-between">
-                                                              <div className="flex-1">
-                                                                <p className="text-sm font-semibold text-gray-800">{playerName}</p>
-                                                                <div className="flex items-center gap-3 mt-1">
-                                                                  <p className="text-xs text-gray-600">
-                                                                    Order: {performance.performance_order}
-                                                                  </p>
-                                                                  {scoresCount > 0 && (
-                                                                    <p className="text-xs text-blue-600">
-                                                                      {scoresCount}/5 judges scored
-                                                                    </p>
-                                                                  )}
-                                                                  {performance.final_score !== null && (
-                                                                    <p className="text-xs text-green-600 font-semibold">
-                                                                      Final: {performance.final_score.toFixed(1)}
-                                                                    </p>
-                                                                  )}
-                                                                </div>
-                                                              </div>
-                                                              <button
-                                                                onClick={() => handleOpenKataScoring(performance)}
-                                                                className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                                                              >
-                                                                Edit
-                                                              </button>
-                                                            </div>
-                                                          );
-                                                        })}
-                                                    </div>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          );
-                                        })()}
-                                      </div>
-                                    ) : (
-                                      <div>
-                                        <p className="text-sm font-semibold text-gray-700 mb-2">Matches:</p>
-                                        {eventMatches.length === 0 ? (
-                                          <div className="bg-white rounded p-3 border border-gray-200">
-                                            <p className="text-xs text-gray-600">
-                                              No matches yet. Generate match draws to create matches for this event.
-                                            </p>
-                                          </div>
-                                        ) : (
-                                          <div className="space-y-2 max-h-64 overflow-y-auto">
-                                            {eventMatches.slice(0, 10).map((match) => {
-                                              const isCompleted = match.status === 'Completed';
-                                              const winner = match.winner_id;
-                                              const winnerParticipant = match.participants?.find(p => {
-                                                const pId = p.player_id?._id || p.team_id?._id;
-                                                return pId?.toString() === winner?.toString();
-                                              });
-                                              
-                                              return (
-                                                <div 
-                                                  key={match._id} 
-                                                  className={`rounded p-3 border-2 flex items-center justify-between transition ${
-                                                    isCompleted 
-                                                      ? 'bg-green-50 border-green-400' 
-                                                      : 'bg-white border-gray-200'
-                                                  }`}
-                                                >
-                                                  <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                      <p className="text-sm font-semibold text-gray-800">{match.match_name || 'Match'}</p>
-                                                      {isCompleted && (
-                                                        <FiCheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" title="Match Completed" />
-                                                      )}
-                                                    </div>
-                                                    <p className="text-xs text-gray-600">
-                                                      {format(new Date(match.scheduled_time), 'MMM dd, HH:mm')} • 
-                                                      <span className={`ml-1 font-semibold ${
-                                                        isCompleted ? 'text-green-700' : 'text-gray-600'
-                                                      }`}>
-                                                        {match.status}
-                                                      </span>
-                                                    </p>
-                                                    {isCompleted && winnerParticipant && (
-                                                      <p className="text-xs text-yellow-700 font-semibold mt-1">
-                                                        🏆 Winner: {
-                                                          winnerParticipant.player_id?.user_id 
-                                                            ? `${winnerParticipant.player_id.user_id.first_name || ''} ${winnerParticipant.player_id.user_id.last_name || ''}`.trim() || winnerParticipant.player_id.user_id.username
-                                                            : winnerParticipant.team_id?.team_name || 'Unknown'
-                                                        }
-                                                      </p>
-                                                    )}
-                                                  </div>
-                                                  <button
-                                                    onClick={() => handleOpenMatchScoring(match)}
-                                                    className={`text-xs px-3 py-1 rounded transition ${
-                                                      isCompleted
-                                                        ? 'bg-green-600 text-white hover:bg-green-700'
-                                                        : 'bg-green-600 text-white hover:bg-green-700'
-                                                    }`}
-                                                  >
-                                                    {isCompleted ? 'View Match' : 'Score Match'}
-                                                  </button>
-                                                </div>
-                                              );
-                                            })}
-                                            {eventMatches.length > 10 && (
-                                              <p className="text-xs text-gray-500 text-center pt-2">
-                                                +{eventMatches.length - 10} more matches
-                                              </p>
-                                            )}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                        <div key={tournament._id} className="border border-gray-200 rounded-xl p-6">
+                          <h3 className="font-bold text-lg text-gray-800 mb-4">{tournament.tournament_name}</h3>
+                          <div className="space-y-3">
+                            {tournamentCategories.map((category) => (
+                              <div key={category._id} className="bg-gray-50 rounded-lg p-4">
+                                <div className="flex justify-between items-center mb-2">
+                                  <div>
+                                    <p className="font-semibold text-gray-800">{category.category_name}</p>
+                                    <p className="text-sm text-gray-600">
+                                      {category.match_type} • {category.age_group || 'All Ages'}
+                                    </p>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                                  <span className="text-xs text-gray-500">
+                                    {tournamentMatches.filter(m => {
+                                      const matchCategoryId = m.category_id?._id || m.category_id;
+                                      return matchCategoryId === category._id || matchCategoryId?.toString() === category._id?.toString();
+                                    }).length} Matches
+                                  </span>
+                                </div>
+                                {isTournamentOwner(tournament) && (
+                                  <button
+                                    onClick={() => handleGenerateDraws(tournament._id, category._id)}
+                                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
+                                  >
+                                    Generate AI Draws
+                                  </button>
+                                )}
+                                {!isTournamentOwner(tournament) && (
+                                  <p className="text-sm text-gray-500 text-center py-2">
+                                    View only - Not your tournament
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       );
                     })}
                 </div>
-              )}
-            </div>
-          )}
-
-
-          {/* Results Tab */}
-          {activeTab === 'results' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Tournament Results</h2>
-                <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                  <FiDownload className="w-5 h-5" />
-                  Export Results
-                </button>
               </div>
-              <div className="space-y-4">
-                {tournaments
-                  .filter(t => t.status === 'Completed' || t.status === 'Ongoing')
-                  .map((tournament) => (
-                    <TournamentResultsCard
-                      key={tournament._id}
-                      tournament={tournament}
-                      matches={matches}
-                      scores={scores}
-                      onCloseTournament={() => handleCloseTournament(tournament._id)}
-                      isOwner={isTournamentOwner(tournament)}
-                    />
-                  ))}
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* Notifications Tab */}
-          {activeTab === 'notifications' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Send Announcements & Notifications</h2>
-                <button
-                  onClick={() => navigate('/organizer/notifications')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  <FiSend className="w-5 h-5" />
-                  Send Notification
-                </button>
-              </div>
-              <div className="space-y-3">
-                {notifications.slice(0, 10).map((notification) => (
-                  <NotificationCard key={notification._id} notification={notification} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Create Tournament Modal */}
-      {showCreateTournament && (
-        <CreateTournamentModal
-          onClose={() => {
-            setShowCreateTournament(false);
-            loadData(true);
-          }}
-          onSuccess={(tournamentId) => {
-            setShowCreateTournament(false);
-            setNewlyCreatedTournamentId(tournamentId);
-            setShowAddEventsPrompt(true);
-            loadData(true);
-          }}
-        />
-      )}
-
-
-      {/* Add Events Prompt Modal */}
-      {showAddEventsPrompt && newlyCreatedTournamentId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-center mb-4">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <FiCheckCircle className="w-8 h-8 text-green-600" />
+            {/* Schedule Tab */}
+            {activeTab === 'schedule' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Set Schedule & Tatami Numbers</h2>
+                  <button
+                    onClick={() => navigate('/organizer/schedule')}
+                    className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                  >
+                    Calendar View <FiArrowRight />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {organizerMatches
+                    .filter(m => m.status === 'Scheduled' || m.status === 'In Progress')
+                    .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time))
+                    .map((match) => (
+                      <MatchScheduleCard
+                        key={match._id}
+                        match={match}
+                        tournaments={organizerTournaments}
+                        onEdit={() => setSelectedMatch(match._id)}
+                      />
+                    ))}
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800 text-center mb-2">
-                Tournament Created Successfully!
-              </h2>
-              <p className="text-gray-600 text-center mb-6">
-                Your tournament has been created. Now you can add events with customizable settings (age groups, belt categories, weight classes, and entry fees).
-              </p>
-              
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                  <strong>💡 Tip:</strong> You can create fully customizable events:
-                  <ul className="list-disc list-inside mt-2 space-y-1 text-xs">
-                    <li>Custom age groups (e.g., Under 8, Under 10, Novice 10-12)</li>
-                    <li>Custom belt groupings (e.g., Novice: White-Green)</li>
-                    <li>Custom weight classes (e.g., -25kg, -30kg, -35kg)</li>
-                    <li>Or use WKF standard categories</li>
-                  </ul>
-                </p>
-              </div>
+            )}
 
-              <div className="flex flex-col space-y-3">
-                <button
-                  onClick={() => {
-                    setShowAddEventsPrompt(false);
-                    navigate(`/organizer/events?tournament=${newlyCreatedTournamentId}`);
-                    setNewlyCreatedTournamentId(null);
-                  }}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition font-medium flex items-center justify-center"
-                >
-                  <FiPlus className="w-5 h-5 mr-2" />
-                  Add Events Now
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddEventsPrompt(false);
-                    setNewlyCreatedTournamentId(null);
-                  }}
-                  className="w-full px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-                >
-                  I'll Add Events Later
-                </button>
+            {/* Judges Tab */}
+            {activeTab === 'judges' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Assign Judges to Events</h2>
+                  <button
+                    onClick={() => navigate('/organizer/events')}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <FiSettings className="w-5 h-5" />
+                    Manage Events & Assign Judges
+                  </button>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                  <p className="text-blue-800 mb-2">
+                    <strong>How to Assign Judges:</strong>
+                  </p>
+                  <p className="text-blue-700 text-sm mb-4">
+                    Judges are assigned to events (categories), not individual matches. When you assign judges to an event,
+                    they will automatically judge all matches in that event.
+                  </p>
+                  <ol className="text-blue-700 text-sm space-y-2 list-decimal list-inside">
+                    <li>Go to <strong>Event Management</strong> (click the button above or navigate via sidebar)</li>
+                    <li>Select a tournament and find the event you want to assign judges to</li>
+                    <li>Click the <strong>"Setup Tatami"</strong> button (⚙️ icon) on the event card</li>
+                    <li>Assign up to 5 judges to the event</li>
+                    <li>Judges will receive notifications and must confirm their assignment</li>
+                    <li>Once confirmed, judges will automatically be assigned to all matches in that event</li>
+                  </ol>
+                </div>
+                <div className="space-y-4">
+                  {categories.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <FiUsers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-2">No events created yet</p>
+                      <p className="text-sm text-gray-500 mb-4">Create events in Event Management to assign judges</p>
+                      <button
+                        onClick={() => navigate('/organizer/events')}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                      >
+                        Go to Event Management
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {categories.map((category) => {
+                        const categoryMatches = matches.filter(m => {
+                          const matchCategoryId = m.category_id?._id || m.category_id;
+                          return String(matchCategoryId) === String(category._id);
+                        });
+                        return (
+                          <div key={category._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                            <h3 className="font-semibold text-gray-800 mb-2">{category.category_name}</h3>
+                            <p className="text-sm text-gray-600 mb-2">
+                              {category.category_type} • {category.participation_type}
+                            </p>
+                            <p className="text-xs text-gray-500 mb-3">
+                              {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
+                            </p>
+                            <button
+                              onClick={() => navigate(`/organizer/events?tournament=${category.tournament_id?._id || category.tournament_id}`)}
+                              className="w-full text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                            >
+                              Setup Tatami & Assign Judges
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Live Event Score Tab - Table Worker Scoring */}
+            {activeTab === 'event-scoring' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Live Event Score</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Table workers can enter scores for matches based on judge marks shown in real tournaments
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => loadData(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <FiRefreshCw className="w-5 h-5" />
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
+                  <p className="text-sm text-blue-800">
+                    <strong>How it works:</strong> Judges show their marks in real tournaments. Table workers enter these scores into the system here.
+                    Each event has assigned judges. You can score matches and Kata performances for each event.
+                  </p>
+                </div>
+
+                {organizerTournaments.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">No Tournaments</h3>
+                    <p className="text-gray-600">Create tournaments and generate match draws to start scoring</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {organizerTournaments
+                      .filter(t => t.status === 'Open' || t.status === 'Ongoing')
+                      .map((tournament) => {
+                        const tournamentCategories = categories.filter(c => {
+                          const catTournamentId = c.tournament_id?._id || c.tournament_id;
+                          return catTournamentId === tournament._id || catTournamentId?.toString() === tournament._id?.toString();
+                        });
+                        const tournamentMatches = organizerMatches.filter(m => {
+                          const matchTournamentId = m.tournament_id?._id || m.tournament_id;
+                          return matchTournamentId === tournament._id || matchTournamentId?.toString() === tournament._id?.toString();
+                        });
+
+                        return (
+                          <div key={tournament._id} className="border border-gray-200 rounded-lg p-6">
+                            <div className="flex items-center justify-between mb-4">
+                              <div>
+                                <h3 className="text-xl font-bold text-gray-800">{tournament.tournament_name}</h3>
+                                <p className="text-sm text-gray-600">
+                                  {tournamentCategories.length} event{tournamentCategories.length !== 1 ? 's' : ''} • {tournamentMatches.length} match{tournamentMatches.length !== 1 ? 'es' : ''}
+                                </p>
+                              </div>
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+                                  tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                }`}>
+                                {tournament.status}
+                              </span>
+                            </div>
+
+                            {tournamentCategories.length === 0 ? (
+                              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                                <p className="text-gray-600">No events created yet. Create events to start scoring.</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {tournamentCategories.map((category) => {
+                                  const eventMatches = tournamentMatches.filter(m => {
+                                    const matchCategoryId = m.category_id?._id || m.category_id;
+                                    return matchCategoryId === category._id || matchCategoryId?.toString() === category._id?.toString();
+                                  });
+                                  const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
+
+                                  return (
+                                    <div key={category._id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                      <div className="flex items-start justify-between mb-4">
+                                        <div className="flex-1">
+                                          <h4 className="font-bold text-lg text-gray-800 mb-1">
+                                            {category.category_name}
+                                          </h4>
+                                          <p className="text-sm text-gray-600">
+                                            {category.category_type} • {category.participation_type}
+                                          </p>
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            {eventMatches.length} match{eventMatches.length !== 1 ? 'es' : ''}
+                                          </p>
+                                        </div>
+                                        <button
+                                          onClick={() => navigate(`/organizer/events?tournament=${tournament._id}`)}
+                                          className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition"
+                                        >
+                                          View Event
+                                        </button>
+                                      </div>
+
+                                      {/* Assigned Judges Section */}
+                                      <div className="mb-4">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">Assigned Judges:</p>
+                                        {(() => {
+                                          const eventTatami = tatamis.find(t => {
+                                            const tatamiCategoryId = t.category_id?._id || t.category_id;
+                                            return String(tatamiCategoryId) === String(category._id);
+                                          });
+                                          const assignedJudges = eventTatami?.assigned_judges || [];
+                                          const confirmedJudges = assignedJudges.filter(j => j.is_confirmed);
+
+                                          return (
+                                            <div className="bg-white rounded p-3 border border-gray-200">
+                                              {confirmedJudges.length > 0 ? (
+                                                <div className="space-y-2">
+                                                  {confirmedJudges.map((judgeAssignment, idx) => {
+                                                    const judge = judgeAssignment.judge_id || {};
+                                                    const judgeUser = judge.user_id || {};
+                                                    const judgeName = judgeUser.first_name && judgeUser.last_name
+                                                      ? `${judgeUser.first_name} ${judgeUser.last_name}`
+                                                      : judgeUser.username || `Judge ${idx + 1}`;
+                                                    return (
+                                                      <div key={idx} className="flex items-center justify-between text-xs">
+                                                        <span className="text-gray-700">{judgeName}</span>
+                                                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                                                          Confirmed
+                                                        </span>
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              ) : (
+                                                <p className="text-xs text-gray-600">
+                                                  No confirmed judges yet. Assign judges in Event Management.
+                                                </p>
+                                              )}
+                                              <button
+                                                onClick={() => navigate(`/organizer/events?tournament=${tournament._id}`)}
+                                                className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                              >
+                                                View/Assign Judges →
+                                              </button>
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
+
+                                      {/* Matches/Performances Section */}
+                                      {isKata ? (
+                                        <div>
+                                          <div className="flex items-center justify-between mb-3">
+                                            <p className="text-sm font-semibold text-gray-700">Kata Performances:</p>
+                                            <button
+                                              onClick={() => {
+                                                setSelectedCategoryForKataPerformance(category);
+                                                setShowKataPerformanceModal(true);
+                                              }}
+                                              className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                                            >
+                                              Create Performances
+                                            </button>
+                                          </div>
+                                          {(() => {
+                                            const eventKataPerformances = kataPerformances.filter(p => {
+                                              const perfCategoryId = p.category_id?._id || p.category_id;
+                                              return String(perfCategoryId) === String(category._id);
+                                            });
+
+                                            if (eventKataPerformances.length === 0) {
+                                              return (
+                                                <div className="bg-white rounded p-3 border border-gray-200">
+                                                  <p className="text-xs text-gray-600 mb-2">
+                                                    No Kata performances created yet. Create performances to start scoring.
+                                                  </p>
+                                                </div>
+                                              );
+                                            }
+
+                                            // Group by round
+                                            const performancesByRound = {};
+                                            eventKataPerformances.forEach(perf => {
+                                              if (!performancesByRound[perf.round]) {
+                                                performancesByRound[perf.round] = [];
+                                              }
+                                              performancesByRound[perf.round].push(perf);
+                                            });
+
+                                            const rounds = ['First Round', 'Second Round (Final 8)', 'Third Round (Final 4)'];
+
+                                            return (
+                                              <div className="space-y-4">
+                                                {rounds.map(round => {
+                                                  const roundPerformances = performancesByRound[round] || [];
+                                                  if (roundPerformances.length === 0) return null;
+
+                                                  return (
+                                                    <div key={round} className="bg-white rounded-lg border border-gray-200 p-4">
+                                                      <div className="flex items-center justify-between mb-3">
+                                                        <div>
+                                                          <h5 className="text-sm font-bold text-gray-800">{round}</h5>
+                                                          <p className="text-xs text-gray-600">
+                                                            {roundPerformances.length} player{roundPerformances.length !== 1 ? 's' : ''}
+                                                          </p>
+                                                        </div>
+                                                        <button
+                                                          onClick={() => handleOpenKataBulkScoring(category, round)}
+                                                          className="text-xs px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition font-semibold"
+                                                        >
+                                                          Score All Players
+                                                        </button>
+                                                      </div>
+                                                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                                                        {roundPerformances
+                                                          .sort((a, b) => {
+                                                            if (a.final_score === null && b.final_score !== null) return 1;
+                                                            if (a.final_score !== null && b.final_score === null) return -1;
+                                                            if (a.final_score === null && b.final_score === null) return a.performance_order - b.performance_order;
+                                                            return b.final_score - a.final_score;
+                                                          })
+                                                          .map((performance) => {
+                                                            const playerName = performance.player_id?.user_id
+                                                              ? `${performance.player_id.user_id.first_name || ''} ${performance.player_id.user_id.last_name || ''}`.trim() || performance.player_id.user_id.username
+                                                              : 'Player';
+                                                            const scoresCount = performance.scores?.length || 0;
+                                                            return (
+                                                              <div key={performance._id} className="bg-gray-50 rounded p-2 border border-gray-200 flex items-center justify-between">
+                                                                <div className="flex-1">
+                                                                  <p className="text-sm font-semibold text-gray-800">{playerName}</p>
+                                                                  <div className="flex items-center gap-3 mt-1">
+                                                                    <p className="text-xs text-gray-600">
+                                                                      Order: {performance.performance_order}
+                                                                    </p>
+                                                                    {scoresCount > 0 && (
+                                                                      <p className="text-xs text-blue-600">
+                                                                        {scoresCount}/5 judges scored
+                                                                      </p>
+                                                                    )}
+                                                                    {performance.final_score !== null && (
+                                                                      <p className="text-xs text-green-600 font-semibold">
+                                                                        Final: {performance.final_score.toFixed(1)}
+                                                                      </p>
+                                                                    )}
+                                                                  </div>
+                                                                </div>
+                                                                <button
+                                                                  onClick={() => handleOpenKataScoring(performance)}
+                                                                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                                                                >
+                                                                  Edit
+                                                                </button>
+                                                              </div>
+                                                            );
+                                                          })}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                      ) : (
+                                        <div>
+                                          <p className="text-sm font-semibold text-gray-700 mb-2">Matches:</p>
+                                          {eventMatches.length === 0 ? (
+                                            <div className="bg-white rounded p-3 border border-gray-200">
+                                              <p className="text-xs text-gray-600">
+                                                No matches yet. Generate match draws to create matches for this event.
+                                              </p>
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                                              {eventMatches.slice(0, 10).map((match) => {
+                                                const isCompleted = match.status === 'Completed';
+                                                const winner = match.winner_id;
+                                                const winnerParticipant = match.participants?.find(p => {
+                                                  const pId = p.player_id?._id || p.team_id?._id;
+                                                  return pId?.toString() === winner?.toString();
+                                                });
+
+                                                return (
+                                                  <div
+                                                    key={match._id}
+                                                    className={`rounded p-3 border-2 flex items-center justify-between transition ${isCompleted
+                                                        ? 'bg-green-50 border-green-400'
+                                                        : 'bg-white border-gray-200'
+                                                      }`}
+                                                  >
+                                                    <div className="flex-1">
+                                                      <div className="flex items-center gap-2 mb-1">
+                                                        <p className="text-sm font-semibold text-gray-800">{match.match_name || 'Match'}</p>
+                                                        {isCompleted && (
+                                                          <FiCheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" title="Match Completed" />
+                                                        )}
+                                                      </div>
+                                                      <p className="text-xs text-gray-600">
+                                                        {format(new Date(match.scheduled_time), 'MMM dd, HH:mm')} •
+                                                        <span className={`ml-1 font-semibold ${isCompleted ? 'text-green-700' : 'text-gray-600'
+                                                          }`}>
+                                                          {match.status}
+                                                        </span>
+                                                      </p>
+                                                      {isCompleted && winnerParticipant && (
+                                                        <p className="text-xs text-yellow-700 font-semibold mt-1">
+                                                          🏆 Winner: {
+                                                            winnerParticipant.player_id?.user_id
+                                                              ? `${winnerParticipant.player_id.user_id.first_name || ''} ${winnerParticipant.player_id.user_id.last_name || ''}`.trim() || winnerParticipant.player_id.user_id.username
+                                                              : winnerParticipant.team_id?.team_name || 'Unknown'
+                                                          }
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                    <button
+                                                      onClick={() => handleOpenMatchScoring(match)}
+                                                      className={`text-xs px-3 py-1 rounded transition ${isCompleted
+                                                          ? 'bg-green-600 text-white hover:bg-green-700'
+                                                          : 'bg-green-600 text-white hover:bg-green-700'
+                                                        }`}
+                                                    >
+                                                      {isCompleted ? 'View Match' : 'Score Match'}
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })}
+                                              {eventMatches.length > 10 && (
+                                                <p className="text-xs text-gray-500 text-center pt-2">
+                                                  +{eventMatches.length - 10} more matches
+                                                </p>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
+
+
+            {/* Results Tab */}
+            {activeTab === 'results' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Tournament Results</h2>
+                  <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                    <FiDownload className="w-5 h-5" />
+                    Export Results
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {tournaments
+                    .filter(t => t.status === 'Completed' || t.status === 'Ongoing')
+                    .map((tournament) => (
+                      <TournamentResultsCard
+                        key={tournament._id}
+                        tournament={tournament}
+                        matches={matches}
+                        scores={scores}
+                        onCloseTournament={() => handleCloseTournament(tournament._id)}
+                        isOwner={isTournamentOwner(tournament)}
+                      />
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notifications Tab */}
+            {activeTab === 'notifications' && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Send Announcements & Notifications</h2>
+                  <button
+                    onClick={() => navigate('/organizer/notifications')}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <FiSend className="w-5 h-5" />
+                    Send Notification
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {notifications.slice(0, 10).map((notification) => (
+                    <NotificationCard key={notification._id} notification={notification} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Create Tournament Modal */}
+        {showCreateTournament && (
+          <CreateTournamentModal
+            onClose={() => {
+              setShowCreateTournament(false);
+              loadData(true);
+            }}
+            onSuccess={(tournamentId) => {
+              setShowCreateTournament(false);
+              setNewlyCreatedTournamentId(tournamentId);
+              setShowAddEventsPrompt(true);
+              loadData(true);
+            }}
+          />
+        )}
+
+
+        {/* Add Events Prompt Modal */}
+        {showAddEventsPrompt && newlyCreatedTournamentId && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                    <FiCheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 text-center mb-2">
+                  Tournament Created Successfully!
+                </h2>
+                <p className="text-gray-600 text-center mb-6">
+                  Your tournament has been created. Now you can add events with customizable settings (age groups, belt categories, weight classes, and entry fees).
+                </p>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-blue-800">
+                    <strong>💡 Tip:</strong> You can create fully customizable events:
+                    <ul className="list-disc list-inside mt-2 space-y-1 text-xs">
+                      <li>Custom age groups (e.g., Under 8, Under 10, Novice 10-12)</li>
+                      <li>Custom belt groupings (e.g., Novice: White-Green)</li>
+                      <li>Custom weight classes (e.g., -25kg, -30kg, -35kg)</li>
+                      <li>Or use WKF standard categories</li>
+                    </ul>
+                  </p>
+                </div>
+
+                <div className="flex flex-col space-y-3">
+                  <button
+                    onClick={() => {
+                      setShowAddEventsPrompt(false);
+                      navigate(`/organizer/events?tournament=${newlyCreatedTournamentId}`);
+                      setNewlyCreatedTournamentId(null);
+                    }}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition font-medium flex items-center justify-center"
+                  >
+                    <FiPlus className="w-5 h-5 mr-2" />
+                    Add Events Now
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddEventsPrompt(false);
+                      setNewlyCreatedTournamentId(null);
+                    }}
+                    className="w-full px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    I'll Add Events Later
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Match Scoring Modal */}
-      {showMatchScoringModal && selectedMatchForScoring && (
-        <MatchScoringModal
-          match={selectedMatchForScoring}
-          participant={selectedParticipantForScoring}
-          setParticipant={setSelectedParticipantForScoring}
-          judge={selectedJudgeForScoring}
-          setJudge={setSelectedJudgeForScoring}
-          judges={judges}
-          tatamis={tatamis}
-          category={categories.find(c => {
-            const matchCategoryId = selectedMatchForScoring.category_id?._id || selectedMatchForScoring.category_id;
-            return String(c._id) === String(matchCategoryId);
-          })}
-          scoringData={scoringData}
-          setScoringData={setScoringData}
-          onSubmit={handleSubmitMatchScore}
-          loadData={loadData}
-          onClose={(shouldRefresh = false) => {
-            setShowMatchScoringModal(false);
-            setSelectedMatchForScoring(null);
-            setSelectedParticipantForScoring(null);
-            setSelectedJudgeForScoring(null);
-            // Reset scoring data
-            setScoringData({
-              technical_score: '',
-              performance_score: '',
-              yuko: 0,
-              ippon: 0,
-              waza_ari: 0,
-              chukoku: 0,
-              keikoku: 0,
-              hansoku_chui: 0,
-              hansoku: 0,
-              jogai: 0,
-              kata_score: '',
-              comments: ''
-            });
-          }}
-          scores={scores}
-        />
-      )}
+        {/* Match Scoring Modal */}
+        {showMatchScoringModal && selectedMatchForScoring && (
+          <MatchScoringModal
+            match={selectedMatchForScoring}
+            participant={selectedParticipantForScoring}
+            setParticipant={setSelectedParticipantForScoring}
+            judge={selectedJudgeForScoring}
+            setJudge={setSelectedJudgeForScoring}
+            judges={judges}
+            tatamis={tatamis}
+            category={categories.find(c => {
+              const matchCategoryId = selectedMatchForScoring.category_id?._id || selectedMatchForScoring.category_id;
+              return String(c._id) === String(matchCategoryId);
+            })}
+            scoringData={scoringData}
+            setScoringData={setScoringData}
+            onSubmit={handleSubmitMatchScore}
+            loadData={loadData}
+            onClose={(shouldRefresh = false) => {
+              setShowMatchScoringModal(false);
+              setSelectedMatchForScoring(null);
+              setSelectedParticipantForScoring(null);
+              setSelectedJudgeForScoring(null);
+              // Reset scoring data
+              setScoringData({
+                technical_score: '',
+                performance_score: '',
+                yuko: 0,
+                ippon: 0,
+                waza_ari: 0,
+                chukoku: 0,
+                keikoku: 0,
+                hansoku_chui: 0,
+                hansoku: 0,
+                jogai: 0,
+                kata_score: '',
+                comments: ''
+              });
+            }}
+            scores={scores}
+          />
+        )}
 
-      {/* Kata Scoring Modal */}
-      {showKataScoringModal && selectedKataPerformanceForScoring && (
-        <KataScoringModal
-          performance={selectedKataPerformanceForScoring}
-          judge={selectedJudgeForScoring}
-          setJudge={setSelectedJudgeForScoring}
-          judges={judges}
-          tatamis={tatamis}
-          category={categories.find(c => {
-            const perfCategoryId = selectedKataPerformanceForScoring.category_id?._id || selectedKataPerformanceForScoring.category_id;
-            return String(c._id) === String(perfCategoryId);
-          })}
-          kataScoresByJudge={kataScoresByJudge}
-          setKataScoresByJudge={setKataScoresByJudge}
-          onSubmit={handleSubmitKataScore}
-          onClose={() => {
-            setShowKataScoringModal(false);
-            setSelectedKataPerformanceForScoring(null);
-            setSelectedJudgeForScoring(null);
-            setKataScoresByJudge({});
-          }}
-        />
-      )}
+        {/* Kata Scoring Modal */}
+        {showKataScoringModal && selectedKataPerformanceForScoring && (
+          <KataScoringModal
+            performance={selectedKataPerformanceForScoring}
+            judge={selectedJudgeForScoring}
+            setJudge={setSelectedJudgeForScoring}
+            judges={judges}
+            tatamis={tatamis}
+            category={categories.find(c => {
+              const perfCategoryId = selectedKataPerformanceForScoring.category_id?._id || selectedKataPerformanceForScoring.category_id;
+              return String(c._id) === String(perfCategoryId);
+            })}
+            kataScoresByJudge={kataScoresByJudge}
+            setKataScoresByJudge={setKataScoresByJudge}
+            onSubmit={handleSubmitKataScore}
+            onClose={() => {
+              setShowKataScoringModal(false);
+              setSelectedKataPerformanceForScoring(null);
+              setSelectedJudgeForScoring(null);
+              setKataScoresByJudge({});
+            }}
+          />
+        )}
 
-      {/* Kata Bulk Scoring Modal - All Players at Once */}
-      {showKataBulkScoringModal && selectedCategoryForBulkScoring && (
-        <KataBulkScoringModal
-          category={selectedCategoryForBulkScoring}
-          tournament={tournaments.find(t => {
-            const catTournamentId = selectedCategoryForBulkScoring.tournament_id?._id || selectedCategoryForBulkScoring.tournament_id;
-            return String(t._id) === String(catTournamentId);
-          })}
-          round={selectedRoundForBulkScoring}
-          performances={kataPerformances.filter(p => {
-            const perfCategoryId = p.category_id?._id || p.category_id;
-            return String(perfCategoryId) === String(selectedCategoryForBulkScoring._id) && p.round === selectedRoundForBulkScoring;
-          })}
-          judges={judges}
-          tatamis={tatamis}
-          kataBulkScores={kataBulkScores}
-          setKataBulkScores={setKataBulkScores}
-          onSavePlayerScores={handleSavePlayerScores}
-          onFinalizeRound={handleFinalizeRound}
-          onRefresh={async () => {
-            // CRITICAL: Refresh kata performances data to get ALL saved scores for ALL players
-            // This ensures that when one player's scores are saved, all other players' saved scores
-            // remain visible and are displayed correctly
-            // Scores must persist until "Finalize & Advance" is clicked
-            if (selectedCategoryForBulkScoring) {
-              try {
-                // Fetch fresh performances for this category - this includes ALL saved scores
-                const response = await kataPerformanceService.getPerformances({ 
-                  category_id: selectedCategoryForBulkScoring._id 
-                });
-                const freshPerformances = response.data || [];
-                
-                // Update kataPerformances state with fresh data
-                // This ensures the performances prop contains all saved scores for all players
-                setKataPerformances(prev => {
-                  // Remove old performances for this category and replace with fresh ones
-                  const otherPerformances = prev.filter(p => {
-                    const perfCategoryId = p.category_id?._id || p.category_id;
-                    return String(perfCategoryId) !== String(selectedCategoryForBulkScoring._id);
+        {/* Kata Bulk Scoring Modal - All Players at Once */}
+        {showKataBulkScoringModal && selectedCategoryForBulkScoring && (
+          <KataBulkScoringModal
+            category={selectedCategoryForBulkScoring}
+            tournament={tournaments.find(t => {
+              const catTournamentId = selectedCategoryForBulkScoring.tournament_id?._id || selectedCategoryForBulkScoring.tournament_id;
+              return String(t._id) === String(catTournamentId);
+            })}
+            round={selectedRoundForBulkScoring}
+            performances={kataPerformances.filter(p => {
+              const perfCategoryId = p.category_id?._id || p.category_id;
+              return String(perfCategoryId) === String(selectedCategoryForBulkScoring._id) && p.round === selectedRoundForBulkScoring;
+            })}
+            judges={judges}
+            tatamis={tatamis}
+            kataBulkScores={kataBulkScores}
+            setKataBulkScores={setKataBulkScores}
+            onSavePlayerScores={handleSavePlayerScores}
+            onFinalizeRound={handleFinalizeRound}
+            onRefresh={async () => {
+              // CRITICAL: Refresh kata performances data to get ALL saved scores for ALL players
+              // This ensures that when one player's scores are saved, all other players' saved scores
+              // remain visible and are displayed correctly
+              // Scores must persist until "Finalize & Advance" is clicked
+              if (selectedCategoryForBulkScoring) {
+                try {
+                  // Fetch fresh performances for this category - this includes ALL saved scores
+                  const response = await kataPerformanceService.getPerformances({
+                    category_id: selectedCategoryForBulkScoring._id
                   });
-                  return [...otherPerformances, ...freshPerformances];
-                });
-              } catch (error) {
-                console.error('Error refreshing kata performances:', error);
-                // Fallback to full reload
-            await loadData(false);
-              }
-            } else {
-              // Fallback to full reload
-              await loadData(false);
-            }
-          }}
-          onClose={() => {
-            setShowKataBulkScoringModal(false);
-            setSelectedCategoryForBulkScoring(null);
-            setSelectedRoundForBulkScoring('First Round');
-            setKataBulkScores({});
-          }}
-        />
-      )}
+                  const freshPerformances = response.data || [];
 
-      {/* Kata Performance Management Modal */}
-      {showKataPerformanceModal && selectedCategoryForKataPerformance && (
-        <KataPerformanceManagementModal
-          category={selectedCategoryForKataPerformance}
-          tournament={tournaments.find(t => {
-            const catTournamentId = selectedCategoryForKataPerformance.tournament_id?._id || selectedCategoryForKataPerformance.tournament_id;
-            return String(t._id) === String(catTournamentId);
-          })}
-          registrations={registrations}
-          kataPerformances={kataPerformances}
-          onCreatePerformances={handleCreateKataPerformances}
-          onClose={() => {
-            setShowKataPerformanceModal(false);
-            setSelectedCategoryForKataPerformance(null);
-          }}
-        />
-      )}
+                  // Update kataPerformances state with fresh data
+                  // This ensures the performances prop contains all saved scores for all players
+                  setKataPerformances(prev => {
+                    // Remove old performances for this category and replace with fresh ones
+                    const otherPerformances = prev.filter(p => {
+                      const perfCategoryId = p.category_id?._id || p.category_id;
+                      return String(perfCategoryId) !== String(selectedCategoryForBulkScoring._id);
+                    });
+                    return [...otherPerformances, ...freshPerformances];
+                  });
+                } catch (error) {
+                  console.error('Error refreshing kata performances:', error);
+                  // Fallback to full reload
+                  await loadData(false);
+                }
+              } else {
+                // Fallback to full reload
+                await loadData(false);
+              }
+            }}
+            onClose={() => {
+              setShowKataBulkScoringModal(false);
+              setSelectedCategoryForBulkScoring(null);
+              setSelectedRoundForBulkScoring('First Round');
+              setKataBulkScores({});
+            }}
+          />
+        )}
+
+        {/* Kata Performance Management Modal */}
+        {showKataPerformanceModal && selectedCategoryForKataPerformance && (
+          <KataPerformanceManagementModal
+            category={selectedCategoryForKataPerformance}
+            tournament={tournaments.find(t => {
+              const catTournamentId = selectedCategoryForKataPerformance.tournament_id?._id || selectedCategoryForKataPerformance.tournament_id;
+              return String(t._id) === String(catTournamentId);
+            })}
+            registrations={registrations}
+            kataPerformances={kataPerformances}
+            onCreatePerformances={handleCreateKataPerformances}
+            onClose={() => {
+              setShowKataPerformanceModal(false);
+              setSelectedCategoryForKataPerformance(null);
+            }}
+          />
+        )}
       </Layout>
     </>
   );
@@ -2437,7 +2430,7 @@ const OrganizerDashboard = () => {
 const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge, judges, tatamis, category, scoringData, setScoringData, onSubmit, onClose, scores, loadData }) => {
   const isKumite = match.match_type === 'Kumite' || match.match_type === 'Team Kumite';
   const isKata = match.match_type === 'Kata' || match.match_type === 'Team Kata';
-  
+
   // Get assigned judges for this event
   const eventTatami = category ? tatamis.find(t => {
     const tatamiCategoryId = t.category_id?._id || t.category_id;
@@ -2466,7 +2459,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
     const matchId = match._id?.toString() || match._id;
     const firstJudge = availableJudges[0];
     const firstJudgeId = firstJudge?._id?.toString() || firstJudge?._id;
-    
+
     // Set first judge as default (only once)
     if (!selectedJudgeForScoring && firstJudge) {
       setSelectedJudgeForScoring(firstJudge);
@@ -2477,9 +2470,9 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
     // Load scores for the selected judge
     const judgeToUse = selectedJudgeForScoring || firstJudge;
     if (!judgeToUse) return;
-    
+
     const judgeToUseId = judgeToUse._id?.toString() || judgeToUse._id;
-    
+
     // Prevent re-initialization if we've already loaded for this match and judge
     const initializationKey = `${matchId}_${judgeToUseId}`;
     if (initializedRef.current === initializationKey) {
@@ -2488,20 +2481,20 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
 
     const scoresByParticipant = {};
     const penaltiesByParticipant = {};
-    
+
     match.participants.forEach(participant => {
       const participantIdStr = String(participant._id);
       const participantId = participant._id?.toString() || participant._id;
-      
+
       const existingScore = scores.find(s => {
         const sMatchId = s.match_id?._id?.toString() || s.match_id?.toString() || s.match_id;
         const sParticipantId = s.participant_id?._id?.toString() || s.participant_id?.toString() || s.participant_id;
         const sJudgeId = s.judge_id?._id?.toString() || s.judge_id?.toString() || s.judge_id;
         return sMatchId === matchId &&
-               sParticipantId === participantId &&
-               sJudgeId === judgeToUseId;
+          sParticipantId === participantId &&
+          sJudgeId === judgeToUseId;
       });
-      
+
       if (existingScore) {
         scoresByParticipant[participantIdStr] = {
           yuko: existingScore.yuko || 0,
@@ -2527,14 +2520,14 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
           comments: ''
         };
       }
-      
+
       // Initialize penalties list (start fresh, user can re-apply)
       penaltiesByParticipant[participantIdStr] = {
         category1: [],
         category2: []
       };
     });
-    
+
     // Update states once with all data
     setKumiteScores(scoresByParticipant);
     setKumitePenalties(penaltiesByParticipant);
@@ -2565,7 +2558,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
       const updatedScore = { ...currentScore };
       const currentPenalties = kumitePenalties[participantId] || { category1: [], category2: [] };
       const updatedPenalties = { ...currentPenalties };
-      
+
       if (scoreType === 'yuko') {
         updatedScore.yuko = Math.max(0, (updatedScore.yuko || 0) + value);
       } else if (scoreType === 'waza_ari') {
@@ -2577,21 +2570,21 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
         if (parts.length >= 3) {
           const category = parts[1]; // '1' or '2'
           const penaltyType = parts.slice(2).join('_'); // 'chukoku', 'keikoku', etc.
-          
+
           // Map penalty type to display code
           let penaltyCode = '';
           if (penaltyType === 'chukoku') penaltyCode = 'C' + category;
           else if (penaltyType === 'keikoku') penaltyCode = 'K' + category;
           else if (penaltyType === 'hansoku_chui') penaltyCode = 'HC' + category;
           else if (penaltyType === 'hansoku') penaltyCode = 'H' + category;
-          
+
           const categoryKey = category === '1' ? 'category1' : 'category2';
-          
+
           if (value > 0) {
             // Add penalty to the correct category list
             const currentCategoryList = updatedPenalties[categoryKey] || [];
             updatedPenalties[categoryKey] = [...currentCategoryList, penaltyCode];
-            
+
             // Update score counts (combine both categories for backend)
             if (penaltyType === 'chukoku') {
               updatedScore.chukoku = (updatedScore.chukoku || 0) + 1;
@@ -2608,7 +2601,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
             const lastIndex = penaltyList.lastIndexOf(penaltyCode);
             if (lastIndex !== -1) {
               updatedPenalties[categoryKey] = penaltyList.filter((_, idx) => idx !== lastIndex);
-              
+
               // Update score counts
               if (penaltyType === 'chukoku') {
                 updatedScore.chukoku = Math.max(0, (updatedScore.chukoku || 0) - 1);
@@ -2623,7 +2616,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
           }
         }
       }
-      
+
       // Update penalties state (use string key for consistency)
       setKumitePenalties(prev => ({
         ...prev,
@@ -2675,7 +2668,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
         ...prev,
         [participantIdStr]: clearedScore
       }));
-      
+
       // Clear penalties
       setKumitePenalties(prev => ({
         ...prev,
@@ -2690,7 +2683,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
       setSubmittingScores(false);
     }
   };
-  
+
   const handleRemovePenalty = async (participantId, category, penaltyCode) => {
     // Use first judge if none selected
     const judgeToUse = selectedJudgeForScoring || availableJudges[0];
@@ -2711,18 +2704,18 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
         jogai: 0,
         comments: ''
       };
-      
+
       const updatedScore = { ...currentScore };
       const currentPenalties = kumitePenalties[participantIdStr] || { category1: [], category2: [] };
       const updatedPenalties = { ...currentPenalties };
-      
+
       // Remove penalty from the correct category list
       const categoryKey = category === 1 ? 'category1' : 'category2';
       const penaltyList = updatedPenalties[categoryKey] || [];
       const lastIndex = penaltyList.lastIndexOf(penaltyCode);
       if (lastIndex !== -1) {
         updatedPenalties[categoryKey] = penaltyList.filter((_, idx) => idx !== lastIndex);
-        
+
         // Update score counts based on penalty type
         if (penaltyCode.startsWith('C')) {
           updatedScore.chukoku = Math.max(0, (updatedScore.chukoku || 0) - 1);
@@ -2734,13 +2727,13 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
           updatedScore.hansoku = Math.max(0, (updatedScore.hansoku || 0) - 1);
         }
       }
-      
+
       // Update states
       setKumiteScores(prev => ({
         ...prev,
         [participantIdStr]: updatedScore
       }));
-      
+
       setKumitePenalties(prev => ({
         ...prev,
         [participantIdStr]: updatedPenalties
@@ -2767,7 +2760,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
       const singleParticipant = match.participants[0];
       const participantId = singleParticipant.player_id?._id || singleParticipant.team_id?._id;
       const participantRecordId = singleParticipant._id;
-      
+
       if (!participantId) {
         toast.error('Cannot complete bye match: Invalid participant');
         return;
@@ -2786,10 +2779,10 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
       });
 
       toast.success('Bye match completed! Player advances to next round.');
-      
+
       // Close modal
       onClose();
-      
+
       // Refresh matches after a short delay if loadData is available
       if (loadData && typeof loadData === 'function') {
         setTimeout(() => {
@@ -2939,7 +2932,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
                 {match.participants && match.participants.length > 0 && (
                   <div className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
                     <h3 className="text-lg font-semibold text-gray-800 mb-4">Scoring Dashboard</h3>
-                    
+
                     {/* Check if this is a bye match (only one participant) */}
                     {match.participants.length === 1 ? (
                       <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6">
@@ -2950,7 +2943,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
                             This player automatically advances to the next round without competing.
                           </p>
                         </div>
-                        
+
                         {/* Show the single participant */}
                         <div className="grid grid-cols-2 gap-4">
                           {(() => {
@@ -2958,7 +2951,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
                             const participantName = p.player_id?.user_id
                               ? `${p.player_id.user_id.first_name || ''} ${p.player_id.user_id.last_name || ''}`.trim() || p.player_id.user_id.username
                               : p.team_id?.team_name || 'Participant';
-                            
+
                             return (
                               <>
                                 <div className="p-4 rounded-lg border-2 bg-red-50 border-red-300">
@@ -2975,7 +2968,7 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
                                     </div>
                                   </div>
                                 </div>
-                                
+
                                 <div className="p-4 rounded-lg border-2 border-dashed border-gray-400 bg-gray-100">
                                   <div className="text-center">
                                     <div className="inline-block px-4 py-1 rounded font-bold text-sm mb-2 bg-gray-500 text-white">
@@ -2995,268 +2988,268 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
                       <>
                         <div className="grid grid-cols-2 gap-4 mb-6">
                           {match.participants.map((p, idx) => {
-                        const participantId = p._id;
-                        const participantIdStr = String(participantId);
-                        const participantName = p.player_id?.user_id
-                          ? `${p.player_id.user_id.first_name || ''} ${p.player_id.user_id.last_name || ''}`.trim() || p.player_id.user_id.username
-                          : p.team_id?.team_name || `Participant ${idx + 1}`;
-                        const isAka = idx === 0;
-                        const participantScore = kumiteScores[participantIdStr] || {
-                          yuko: 0,
-                          waza_ari: 0,
-                          ippon: 0,
-                          chukoku: 0,
-                          keikoku: 0,
-                          hansoku_chui: 0,
-                          hansoku: 0,
-                          jogai: 0
-                        };
-                        const totalScore = (participantScore.yuko || 0) * 1 + 
-                                         (participantScore.waza_ari || 0) * 2 + 
-                                         (participantScore.ippon || 0) * 3;
-                        const participantPenalties = kumitePenalties[participantIdStr] || { category1: [], category2: [] };
+                            const participantId = p._id;
+                            const participantIdStr = String(participantId);
+                            const participantName = p.player_id?.user_id
+                              ? `${p.player_id.user_id.first_name || ''} ${p.player_id.user_id.last_name || ''}`.trim() || p.player_id.user_id.username
+                              : p.team_id?.team_name || `Participant ${idx + 1}`;
+                            const isAka = idx === 0;
+                            const participantScore = kumiteScores[participantIdStr] || {
+                              yuko: 0,
+                              waza_ari: 0,
+                              ippon: 0,
+                              chukoku: 0,
+                              keikoku: 0,
+                              hansoku_chui: 0,
+                              hansoku: 0,
+                              jogai: 0
+                            };
+                            const totalScore = (participantScore.yuko || 0) * 1 +
+                              (participantScore.waza_ari || 0) * 2 +
+                              (participantScore.ippon || 0) * 3;
+                            const participantPenalties = kumitePenalties[participantIdStr] || { category1: [], category2: [] };
 
-                        return (
-                          <div key={participantId} className={`p-4 rounded-lg border-2 ${isAka ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'}`}>
-                            <div className="text-center mb-3">
-                              <div className={`inline-block px-4 py-1 rounded font-bold text-sm mb-2 ${isAka ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'}`}>
-                                {isAka ? 'AKA (Red)' : 'AO (Blue)'}
-                              </div>
-                              <h4 className="font-bold text-gray-800 text-lg">{participantName}</h4>
-                              {p.player_id?.belt_rank && (
-                                <p className="text-sm text-gray-600">Belt: {p.player_id.belt_rank}</p>
-                              )}
-                              <div className="text-2xl font-bold text-gray-800 mt-2">
-                                Score: {totalScore}
-                              </div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                Y: {participantScore.yuko} W: {participantScore.waza_ari} I: {participantScore.ippon}
-                              </div>
-                            </div>
-
-                            {/* Scoring Buttons with Add/Remove */}
-                            <div className="space-y-2 mb-3">
-                              {/* Yuko */}
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleKumiteScoreClick(participantId, 'yuko', -1)}
-                                  disabled={submittingScores || (participantScore.yuko || 0) === 0}
-                                  className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center min-w-[40px]"
-                                  title="Remove Yuko"
-                                >
-                                  <FiMinus className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleKumiteScoreClick(participantId, 'yuko', 1)}
-                                  disabled={submittingScores}
-                                  className="flex-1 bg-blue-500 text-white px-3 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 font-semibold"
-                                >
-                                  Yuko (+1)
-                                </button>
-                                <span className="text-sm font-bold text-gray-700 min-w-[30px] text-center">
-                                  {participantScore.yuko || 0}
-                                </span>
-                              </div>
-                              {/* Waza-ari */}
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleKumiteScoreClick(participantId, 'waza_ari', -1)}
-                                  disabled={submittingScores || (participantScore.waza_ari || 0) === 0}
-                                  className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center min-w-[40px]"
-                                  title="Remove Waza-ari"
-                                >
-                                  <FiMinus className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleKumiteScoreClick(participantId, 'waza_ari', 1)}
-                                  disabled={submittingScores}
-                                  className="flex-1 bg-yellow-500 text-white px-3 py-2 rounded text-sm hover:bg-yellow-600 disabled:opacity-50 font-semibold"
-                                >
-                                  Waza-ari (+2)
-                                </button>
-                                <span className="text-sm font-bold text-gray-700 min-w-[30px] text-center">
-                                  {participantScore.waza_ari || 0}
-                                </span>
-                              </div>
-                              {/* Ippon */}
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleKumiteScoreClick(participantId, 'ippon', -1)}
-                                  disabled={submittingScores || (participantScore.ippon || 0) === 0}
-                                  className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center min-w-[40px]"
-                                  title="Remove Ippon"
-                                >
-                                  <FiMinus className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleKumiteScoreClick(participantId, 'ippon', 1)}
-                                  disabled={submittingScores}
-                                  className="flex-1 bg-red-500 text-white px-3 py-2 rounded text-sm hover:bg-red-600 disabled:opacity-50 font-semibold"
-                                >
-                                  Ippon (+3)
-                                </button>
-                                <span className="text-sm font-bold text-gray-700 min-w-[30px] text-center">
-                                  {participantScore.ippon || 0}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Clear All Button */}
-                            <div className="mb-3">
-                              <button
-                                type="button"
-                                onClick={() => handleClearScores(participantId)}
-                                disabled={submittingScores || totalScore === 0}
-                                className="w-full bg-red-600 text-white px-3 py-2 rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
-                                title="Clear all scores for this participant"
-                              >
-                                <FiX className="w-4 h-4" />
-                                Clear All Scores
-                              </button>
-                            </div>
-
-                            {/* Penalties Section */}
-                            <div className="space-y-3">
-                              <p className="text-xs font-semibold text-gray-700 mb-2">Penalties:</p>
-                              
-                              {/* Category 1 Penalties */}
-                              <div className="border border-gray-200 rounded p-2 bg-white">
-                                <p className="text-xs font-semibold text-gray-700 mb-2">Category 1 (Excessive Contact):</p>
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_chukoku', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-orange-200 text-orange-800 px-2 py-1 rounded text-xs hover:bg-orange-300 disabled:opacity-50"
-                                  >
-                                    C1
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_keikoku', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-orange-300 text-orange-900 px-2 py-1 rounded text-xs hover:bg-orange-400 disabled:opacity-50"
-                                  >
-                                    K1
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_hansoku_chui', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs hover:bg-red-300 disabled:opacity-50"
-                                  >
-                                    HC1
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_hansoku', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50"
-                                  >
-                                    H1
-                                  </button>
-                                </div>
-                                {/* Display Category 1 Penalties List */}
-                                <div className="min-h-[40px] border-t border-gray-100 pt-2">
-                                  {participantPenalties.category1 && participantPenalties.category1.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {participantPenalties.category1.map((penalty, index) => (
-                                        <span
-                                          key={index}
-                                          className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-semibold"
-                                        >
-                                          {penalty}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemovePenalty(participantId, 1, penalty)}
-                                            disabled={submittingScores}
-                                            className="text-orange-600 hover:text-orange-800 disabled:opacity-50"
-                                            title="Remove penalty"
-                                          >
-                                            <FiX className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs text-gray-400 italic">No penalties</p>
+                            return (
+                              <div key={participantId} className={`p-4 rounded-lg border-2 ${isAka ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'}`}>
+                                <div className="text-center mb-3">
+                                  <div className={`inline-block px-4 py-1 rounded font-bold text-sm mb-2 ${isAka ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'}`}>
+                                    {isAka ? 'AKA (Red)' : 'AO (Blue)'}
+                                  </div>
+                                  <h4 className="font-bold text-gray-800 text-lg">{participantName}</h4>
+                                  {p.player_id?.belt_rank && (
+                                    <p className="text-sm text-gray-600">Belt: {p.player_id.belt_rank}</p>
                                   )}
+                                  <div className="text-2xl font-bold text-gray-800 mt-2">
+                                    Score: {totalScore}
+                                  </div>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    Y: {participantScore.yuko} W: {participantScore.waza_ari} I: {participantScore.ippon}
+                                  </div>
                                 </div>
-                              </div>
 
-                              {/* Category 2 Penalties */}
-                              <div className="border border-gray-200 rounded p-2 bg-white">
-                                <p className="text-xs font-semibold text-gray-700 mb-2">Category 2 (Behavior):</p>
-                                <div className="flex flex-wrap gap-2 mb-2">
+                                {/* Scoring Buttons with Add/Remove */}
+                                <div className="space-y-2 mb-3">
+                                  {/* Yuko */}
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleKumiteScoreClick(participantId, 'yuko', -1)}
+                                      disabled={submittingScores || (participantScore.yuko || 0) === 0}
+                                      className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center min-w-[40px]"
+                                      title="Remove Yuko"
+                                    >
+                                      <FiMinus className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleKumiteScoreClick(participantId, 'yuko', 1)}
+                                      disabled={submittingScores}
+                                      className="flex-1 bg-blue-500 text-white px-3 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 font-semibold"
+                                    >
+                                      Yuko (+1)
+                                    </button>
+                                    <span className="text-sm font-bold text-gray-700 min-w-[30px] text-center">
+                                      {participantScore.yuko || 0}
+                                    </span>
+                                  </div>
+                                  {/* Waza-ari */}
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleKumiteScoreClick(participantId, 'waza_ari', -1)}
+                                      disabled={submittingScores || (participantScore.waza_ari || 0) === 0}
+                                      className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center min-w-[40px]"
+                                      title="Remove Waza-ari"
+                                    >
+                                      <FiMinus className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleKumiteScoreClick(participantId, 'waza_ari', 1)}
+                                      disabled={submittingScores}
+                                      className="flex-1 bg-yellow-500 text-white px-3 py-2 rounded text-sm hover:bg-yellow-600 disabled:opacity-50 font-semibold"
+                                    >
+                                      Waza-ari (+2)
+                                    </button>
+                                    <span className="text-sm font-bold text-gray-700 min-w-[30px] text-center">
+                                      {participantScore.waza_ari || 0}
+                                    </span>
+                                  </div>
+                                  {/* Ippon */}
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleKumiteScoreClick(participantId, 'ippon', -1)}
+                                      disabled={submittingScores || (participantScore.ippon || 0) === 0}
+                                      className="bg-gray-400 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center min-w-[40px]"
+                                      title="Remove Ippon"
+                                    >
+                                      <FiMinus className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleKumiteScoreClick(participantId, 'ippon', 1)}
+                                      disabled={submittingScores}
+                                      className="flex-1 bg-red-500 text-white px-3 py-2 rounded text-sm hover:bg-red-600 disabled:opacity-50 font-semibold"
+                                    >
+                                      Ippon (+3)
+                                    </button>
+                                    <span className="text-sm font-bold text-gray-700 min-w-[30px] text-center">
+                                      {participantScore.ippon || 0}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Clear All Button */}
+                                <div className="mb-3">
                                   <button
                                     type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_chukoku', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-orange-200 text-orange-800 px-2 py-1 rounded text-xs hover:bg-orange-300 disabled:opacity-50"
+                                    onClick={() => handleClearScores(participantId)}
+                                    disabled={submittingScores || totalScore === 0}
+                                    className="w-full bg-red-600 text-white px-3 py-2 rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
+                                    title="Clear all scores for this participant"
                                   >
-                                    C2
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_keikoku', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-orange-300 text-orange-900 px-2 py-1 rounded text-xs hover:bg-orange-400 disabled:opacity-50"
-                                  >
-                                    K2
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_hansoku_chui', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs hover:bg-red-300 disabled:opacity-50"
-                                  >
-                                    HC2
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_hansoku', 1)}
-                                    disabled={submittingScores}
-                                    className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50"
-                                  >
-                                    H2
+                                    <FiX className="w-4 h-4" />
+                                    Clear All Scores
                                   </button>
                                 </div>
-                                {/* Display Category 2 Penalties List */}
-                                <div className="min-h-[40px] border-t border-gray-100 pt-2">
-                                  {participantPenalties.category2 && participantPenalties.category2.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {participantPenalties.category2.map((penalty, index) => (
-                                        <span
-                                          key={index}
-                                          className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-semibold"
-                                        >
-                                          {penalty}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemovePenalty(participantId, 2, penalty)}
-                                            disabled={submittingScores}
-                                            className="text-orange-600 hover:text-orange-800 disabled:opacity-50"
-                                            title="Remove penalty"
-                                          >
-                                            <FiX className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      ))}
+
+                                {/* Penalties Section */}
+                                <div className="space-y-3">
+                                  <p className="text-xs font-semibold text-gray-700 mb-2">Penalties:</p>
+
+                                  {/* Category 1 Penalties */}
+                                  <div className="border border-gray-200 rounded p-2 bg-white">
+                                    <p className="text-xs font-semibold text-gray-700 mb-2">Category 1 (Excessive Contact):</p>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_chukoku', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-orange-200 text-orange-800 px-2 py-1 rounded text-xs hover:bg-orange-300 disabled:opacity-50"
+                                      >
+                                        C1
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_keikoku', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-orange-300 text-orange-900 px-2 py-1 rounded text-xs hover:bg-orange-400 disabled:opacity-50"
+                                      >
+                                        K1
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_hansoku_chui', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs hover:bg-red-300 disabled:opacity-50"
+                                      >
+                                        HC1
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_1_hansoku', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50"
+                                      >
+                                        H1
+                                      </button>
                                     </div>
-                                  ) : (
-                                    <p className="text-xs text-gray-400 italic">No penalties</p>
-                                  )}
+                                    {/* Display Category 1 Penalties List */}
+                                    <div className="min-h-[40px] border-t border-gray-100 pt-2">
+                                      {participantPenalties.category1 && participantPenalties.category1.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1">
+                                          {participantPenalties.category1.map((penalty, index) => (
+                                            <span
+                                              key={index}
+                                              className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-semibold"
+                                            >
+                                              {penalty}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemovePenalty(participantId, 1, penalty)}
+                                                disabled={submittingScores}
+                                                className="text-orange-600 hover:text-orange-800 disabled:opacity-50"
+                                                title="Remove penalty"
+                                              >
+                                                <FiX className="w-3 h-3" />
+                                              </button>
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-gray-400 italic">No penalties</p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Category 2 Penalties */}
+                                  <div className="border border-gray-200 rounded p-2 bg-white">
+                                    <p className="text-xs font-semibold text-gray-700 mb-2">Category 2 (Behavior):</p>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_chukoku', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-orange-200 text-orange-800 px-2 py-1 rounded text-xs hover:bg-orange-300 disabled:opacity-50"
+                                      >
+                                        C2
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_keikoku', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-orange-300 text-orange-900 px-2 py-1 rounded text-xs hover:bg-orange-400 disabled:opacity-50"
+                                      >
+                                        K2
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_hansoku_chui', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs hover:bg-red-300 disabled:opacity-50"
+                                      >
+                                        HC2
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleKumiteScoreClick(participantId, 'penalty_2_hansoku', 1)}
+                                        disabled={submittingScores}
+                                        className="bg-red-500 text-white px-2 py-1 rounded text-xs hover:bg-red-600 disabled:opacity-50"
+                                      >
+                                        H2
+                                      </button>
+                                    </div>
+                                    {/* Display Category 2 Penalties List */}
+                                    <div className="min-h-[40px] border-t border-gray-100 pt-2">
+                                      {participantPenalties.category2 && participantPenalties.category2.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1">
+                                          {participantPenalties.category2.map((penalty, index) => (
+                                            <span
+                                              key={index}
+                                              className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs font-semibold"
+                                            >
+                                              {penalty}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemovePenalty(participantId, 2, penalty)}
+                                                disabled={submittingScores}
+                                                className="text-orange-600 hover:text-orange-800 disabled:opacity-50"
+                                                title="Remove penalty"
+                                              >
+                                                <FiX className="w-3 h-3" />
+                                              </button>
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-gray-400 italic">No penalties</p>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </div>
-                        );
+                            );
                           })}
                         </div>
                       </>
@@ -3304,304 +3297,303 @@ const MatchScoringModal = ({ match, participant, setParticipant, judge, setJudge
             }
             onSubmit(judge._id, participant._id, scoringData);
           }} className="space-y-6">
-          {/* Select Judge */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Judge <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={judge?._id || ''}
-              onChange={(e) => {
-                const selectedJudge = availableJudges.find(j => String(j._id) === e.target.value);
-                setJudge(selectedJudge || null);
-              }}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Select a judge...</option>
-              {availableJudges.map((j) => {
-                const user = j.user_id || {};
-                const name = user.first_name && user.last_name
-                  ? `${user.first_name} ${user.last_name}`
-                  : user.username || 'Judge';
-                return (
-                  <option key={j._id} value={j._id}>{name}</option>
-                );
-              })}
-            </select>
-            {availableJudges.length === 0 && (
-              <p className="text-xs text-yellow-600 mt-1">
-                No confirmed judges assigned to this event. Assign judges in Event Management.
-              </p>
-            )}
-          </div>
-
-          {/* Select Participant */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Participant <span className="text-red-500">*</span>
-            </label>
-            {match.participants && match.participants.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {match.participants.map((p, idx) => {
-                  const participantName = p.player_id?.user_id
-                    ? `${p.player_id.user_id.first_name || ''} ${p.player_id.user_id.last_name || ''}`.trim() || p.player_id.user_id.username
-                    : p.team_id?.team_name || `Participant ${idx + 1}`;
-                  const existingScore = judge ? scores.find(s => 
-                    (s.match_id?._id || s.match_id) === match._id &&
-                    (s.participant_id?._id || s.participant_id) === p._id &&
-                    (s.judge_id?._id || s.judge_id) === judge._id
-                  ) : null;
-                  
+            {/* Select Judge */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Judge <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={judge?._id || ''}
+                onChange={(e) => {
+                  const selectedJudge = availableJudges.find(j => String(j._id) === e.target.value);
+                  setJudge(selectedJudge || null);
+                }}
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select a judge...</option>
+                {availableJudges.map((j) => {
+                  const user = j.user_id || {};
+                  const name = user.first_name && user.last_name
+                    ? `${user.first_name} ${user.last_name}`
+                    : user.username || 'Judge';
                   return (
-                    <button
-                      key={p._id || idx}
-                      type="button"
-                      onClick={() => {
-                        setParticipant(p);
-                        if (existingScore) {
-                          setScoringData({
-                            technical_score: existingScore.technical_score?.toString() || '',
-                            performance_score: existingScore.performance_score?.toString() || '',
-                            yuko: existingScore.yuko || 0,
-                            ippon: existingScore.ippon || 0,
-                            waza_ari: existingScore.waza_ari || 0,
-                            chukoku: existingScore.chukoku || 0,
-                            keikoku: existingScore.keikoku || 0,
-                            hansoku_chui: existingScore.hansoku_chui || 0,
-                            hansoku: existingScore.hansoku || 0,
-                            jogai: existingScore.jogai || 0,
-                            comments: existingScore.comments || ''
-                          });
-                        } else {
-                          setScoringData({
-                            technical_score: '',
-                            performance_score: '',
-                            yuko: 0,
-                            ippon: 0,
-                            waza_ari: 0,
-                            chukoku: 0,
-                            keikoku: 0,
-                            hansoku_chui: 0,
-                            hansoku: 0,
-                            jogai: 0,
-                            comments: ''
-                          });
-                        }
-                      }}
-                      className={`p-4 border-2 rounded-lg transition text-left ${
-                        participant?._id === p._id
-                          ? 'border-blue-500 bg-blue-50'
-                          : existingScore
-                          ? 'border-green-300 bg-green-50 hover:border-green-400'
-                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-800">{participantName}</p>
-                          <p className="text-sm text-gray-600">{p.position || `Position ${idx + 1}`}</p>
-                          {existingScore && (
-                            <p className="text-xs text-green-600 mt-1">
-                              Scored: {existingScore.final_score?.toFixed(2) || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-                        {existingScore && (
-                          <FiCheckCircle className="w-5 h-5 text-green-600" />
-                        )}
-                      </div>
-                    </button>
+                    <option key={j._id} value={j._id}>{name}</option>
                   );
                 })}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600">No participants found for this match</p>
-            )}
-          </div>
-
-          {/* Scoring Fields - Only show if participant and judge selected (for Kata) */}
-          {participant && judge && (
-            <>
-              {isKata && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Kata Scoring</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Technical Score (0-10) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={scoringData.technical_score}
-                        onChange={(e) => setScoringData({ ...scoringData, technical_score: e.target.value })}
-                        required
-                        min="0"
-                        max="10"
-                        step="0.1"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Performance Score (0-10) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={scoringData.performance_score}
-                        onChange={(e) => setScoringData({ ...scoringData, performance_score: e.target.value })}
-                        required
-                        min="0"
-                        max="10"
-                        step="0.1"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                  {scoringData.technical_score && scoringData.performance_score && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Calculated Final Score (Average):</p>
-                      <p className="text-2xl font-bold text-blue-700">
-                        {((parseFloat(scoringData.technical_score) + parseFloat(scoringData.performance_score)) / 2).toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                </div>
+              </select>
+              {availableJudges.length === 0 && (
+                <p className="text-xs text-yellow-600 mt-1">
+                  No confirmed judges assigned to this event. Assign judges in Event Management.
+                </p>
               )}
+            </div>
 
-              {isKumite && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Kumite Scoring</h3>
-                  
-                  {/* Points */}
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-700 mb-3">Points</h4>
+            {/* Select Participant */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Participant <span className="text-red-500">*</span>
+              </label>
+              {match.participants && match.participants.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {match.participants.map((p, idx) => {
+                    const participantName = p.player_id?.user_id
+                      ? `${p.player_id.user_id.first_name || ''} ${p.player_id.user_id.last_name || ''}`.trim() || p.player_id.user_id.username
+                      : p.team_id?.team_name || `Participant ${idx + 1}`;
+                    const existingScore = judge ? scores.find(s =>
+                      (s.match_id?._id || s.match_id) === match._id &&
+                      (s.participant_id?._id || s.participant_id) === p._id &&
+                      (s.judge_id?._id || s.judge_id) === judge._id
+                    ) : null;
+
+                    return (
+                      <button
+                        key={p._id || idx}
+                        type="button"
+                        onClick={() => {
+                          setParticipant(p);
+                          if (existingScore) {
+                            setScoringData({
+                              technical_score: existingScore.technical_score?.toString() || '',
+                              performance_score: existingScore.performance_score?.toString() || '',
+                              yuko: existingScore.yuko || 0,
+                              ippon: existingScore.ippon || 0,
+                              waza_ari: existingScore.waza_ari || 0,
+                              chukoku: existingScore.chukoku || 0,
+                              keikoku: existingScore.keikoku || 0,
+                              hansoku_chui: existingScore.hansoku_chui || 0,
+                              hansoku: existingScore.hansoku || 0,
+                              jogai: existingScore.jogai || 0,
+                              comments: existingScore.comments || ''
+                            });
+                          } else {
+                            setScoringData({
+                              technical_score: '',
+                              performance_score: '',
+                              yuko: 0,
+                              ippon: 0,
+                              waza_ari: 0,
+                              chukoku: 0,
+                              keikoku: 0,
+                              hansoku_chui: 0,
+                              hansoku: 0,
+                              jogai: 0,
+                              comments: ''
+                            });
+                          }
+                        }}
+                        className={`p-4 border-2 rounded-lg transition text-left ${participant?._id === p._id
+                            ? 'border-blue-500 bg-blue-50'
+                            : existingScore
+                              ? 'border-green-300 bg-green-50 hover:border-green-400'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                          }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-gray-800">{participantName}</p>
+                            <p className="text-sm text-gray-600">{p.position || `Position ${idx + 1}`}</p>
+                            {existingScore && (
+                              <p className="text-xs text-green-600 mt-1">
+                                Scored: {existingScore.final_score?.toFixed(2) || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+                          {existingScore && (
+                            <FiCheckCircle className="w-5 h-5 text-green-600" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">No participants found for this match</p>
+              )}
+            </div>
+
+            {/* Scoring Fields - Only show if participant and judge selected (for Kata) */}
+            {participant && judge && (
+              <>
+                {isKata && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Kata Scoring</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-medium text-gray-700">Ippon (3 points)</label>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => handleDecrement('ippon')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
-                              <FiMinus className="w-4 h-4" />
-                            </button>
-                            <span className="w-12 text-center font-bold text-lg">{scoringData.ippon || 0}</span>
-                            <button type="button" onClick={() => handleIncrement('ippon')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
-                              <FiPlusIcon className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Technical Score (0-10) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={scoringData.technical_score}
+                          onChange={(e) => setScoringData({ ...scoringData, technical_score: e.target.value })}
+                          required
+                          min="0"
+                          max="10"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
                       </div>
-                      <div className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-medium text-gray-700">Waza-ari (2 points)</label>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => handleDecrement('waza_ari')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
-                              <FiMinus className="w-4 h-4" />
-                            </button>
-                            <span className="w-12 text-center font-bold text-lg">{scoringData.waza_ari || 0}</span>
-                            <button type="button" onClick={() => handleIncrement('waza_ari')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
-                              <FiPlusIcon className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Performance Score (0-10) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={scoringData.performance_score}
+                          onChange={(e) => setScoringData({ ...scoringData, performance_score: e.target.value })}
+                          required
+                          min="0"
+                          max="10"
+                          step="0.1"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
                       </div>
                     </div>
+                    {scoringData.technical_score && scoringData.performance_score && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">Calculated Final Score (Average):</p>
+                        <p className="text-2xl font-bold text-blue-700">
+                          {((parseFloat(scoringData.technical_score) + parseFloat(scoringData.performance_score)) / 2).toFixed(2)}
+                        </p>
+                      </div>
+                    )}
                   </div>
+                )}
 
-                  {/* Penalties */}
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-700 mb-3">Penalties</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        { field: 'chukoku', label: 'Chukoku (-0.5)' },
-                        { field: 'keikoku', label: 'Keikoku (-1)' },
-                        { field: 'hansoku_chui', label: 'Hansoku-Chui (-1.5)' },
-                        { field: 'hansoku', label: 'Hansoku (-2)' }
-                      ].map(({ field, label }) => (
-                        <div key={field} className="border border-gray-200 rounded-lg p-4">
+                {isKumite && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Kumite Scoring</h3>
+
+                    {/* Points */}
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-700 mb-3">Points</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="border border-gray-200 rounded-lg p-4">
                           <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-700">{label}</label>
+                            <label className="text-sm font-medium text-gray-700">Ippon (3 points)</label>
                             <div className="flex items-center gap-2">
-                              <button type="button" onClick={() => handleDecrement(field)} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                              <button type="button" onClick={() => handleDecrement('ippon')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
                                 <FiMinus className="w-4 h-4" />
                               </button>
-                              <span className="w-12 text-center font-bold text-lg">{scoringData[field] || 0}</span>
-                              <button type="button" onClick={() => handleIncrement(field)} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                              <span className="w-12 text-center font-bold text-lg">{scoringData.ippon || 0}</span>
+                              <button type="button" onClick={() => handleIncrement('ippon')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
                                 <FiPlusIcon className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Jogai */}
-                  <div>
-                    <h4 className="text-md font-semibold text-gray-700 mb-3">Jogai (Out-of-bounds)</h4>
-                    <div className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-700">Jogai Warnings/Deductions (-0.25 each)</label>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => handleDecrement('jogai')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
-                            <FiMinus className="w-4 h-4" />
-                          </button>
-                          <span className="w-12 text-center font-bold text-lg">{scoringData.jogai || 0}</span>
-                          <button type="button" onClick={() => handleIncrement('jogai')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
-                            <FiPlusIcon className="w-4 h-4" />
-                          </button>
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-gray-700">Waza-ari (2 points)</label>
+                            <div className="flex items-center gap-2">
+                              <button type="button" onClick={() => handleDecrement('waza_ari')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                                <FiMinus className="w-4 h-4" />
+                              </button>
+                              <span className="w-12 text-center font-bold text-lg">{scoringData.waza_ari || 0}</span>
+                              <button type="button" onClick={() => handleIncrement('waza_ari')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                                <FiPlusIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Calculated Score */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-1">Calculated Score:</p>
-                    <p className="text-2xl font-bold text-blue-700">
-                      {(() => {
-                        const points = (scoringData.ippon || 0) * 3 + (scoringData.waza_ari || 0) * 2;
-                        const penaltyDeduction = (scoringData.chukoku || 0) * 0.5 + 
-                                               (scoringData.keikoku || 0) * 1 + 
-                                               (scoringData.hansoku_chui || 0) * 1.5 + 
-                                               (scoringData.hansoku || 0) * 2 +
-                                               (scoringData.jogai || 0) * 0.25;
-                        const final = Math.max(0, Math.min(10, points - penaltyDeduction));
-                        return final.toFixed(2);
-                      })()}
-                    </p>
+                    {/* Penalties */}
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-700 mb-3">Penalties</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          { field: 'chukoku', label: 'Chukoku (-0.5)' },
+                          { field: 'keikoku', label: 'Keikoku (-1)' },
+                          { field: 'hansoku_chui', label: 'Hansoku-Chui (-1.5)' },
+                          { field: 'hansoku', label: 'Hansoku (-2)' }
+                        ].map(({ field, label }) => (
+                          <div key={field} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-700">{label}</label>
+                              <div className="flex items-center gap-2">
+                                <button type="button" onClick={() => handleDecrement(field)} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                                  <FiMinus className="w-4 h-4" />
+                                </button>
+                                <span className="w-12 text-center font-bold text-lg">{scoringData[field] || 0}</span>
+                                <button type="button" onClick={() => handleIncrement(field)} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                                  <FiPlusIcon className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Jogai */}
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-700 mb-3">Jogai (Out-of-bounds)</h4>
+                      <div className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-medium text-gray-700">Jogai Warnings/Deductions (-0.25 each)</label>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => handleDecrement('jogai')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                              <FiMinus className="w-4 h-4" />
+                            </button>
+                            <span className="w-12 text-center font-bold text-lg">{scoringData.jogai || 0}</span>
+                            <button type="button" onClick={() => handleIncrement('jogai')} className="p-1 bg-gray-200 rounded hover:bg-gray-300">
+                              <FiPlusIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calculated Score */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Calculated Score:</p>
+                      <p className="text-2xl font-bold text-blue-700">
+                        {(() => {
+                          const points = (scoringData.ippon || 0) * 3 + (scoringData.waza_ari || 0) * 2;
+                          const penaltyDeduction = (scoringData.chukoku || 0) * 0.5 +
+                            (scoringData.keikoku || 0) * 1 +
+                            (scoringData.hansoku_chui || 0) * 1.5 +
+                            (scoringData.hansoku || 0) * 2 +
+                            (scoringData.jogai || 0) * 0.25;
+                          const final = Math.max(0, Math.min(10, points - penaltyDeduction));
+                          return final.toFixed(2);
+                        })()}
+                      </p>
+                    </div>
                   </div>
+                )}
+
+                {/* Comments */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Comments (Optional)</label>
+                  <textarea
+                    value={scoringData.comments}
+                    onChange={(e) => setScoringData({ ...scoringData, comments: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Add any comments or notes..."
+                  />
                 </div>
-              )}
+              </>
+            )}
 
-              {/* Comments */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Comments (Optional)</label>
-                <textarea
-                  value={scoringData.comments}
-                  onChange={(e) => setScoringData({ ...scoringData, comments: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Add any comments or notes..."
-                />
-              </div>
-            </>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex justify-between items-center pt-4 border-t">
-            <button type="button" onClick={onClose} className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!participant || !judge}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              Submit Score
-            </button>
-          </div>
-        </form>
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center pt-4 border-t">
+              <button type="button" onClick={onClose} className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!participant || !judge}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                Submit Score
+              </button>
+            </div>
+          </form>
         )}
       </div>
     </div>
@@ -3699,7 +3691,7 @@ const KataScoringModal = ({ performance, judges, tatamis, category, kataScoresBy
         <form onSubmit={onSubmit} className="space-y-6">
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
             <p className="text-sm text-yellow-800">
-              <strong>Kata Scoring System:</strong> Each judge gives one score between 5.0-10.0. 
+              <strong>Kata Scoring System:</strong> Each judge gives one score between 5.0-10.0.
               Final score is calculated by removing the highest and lowest scores, then summing the remaining 3 scores.
             </p>
           </div>
@@ -3830,13 +3822,12 @@ const TournamentCard = ({ tournament, registrations, matches, onViewDetails, onG
               View Only
             </span>
           )}
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-            tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-            tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-            tournament.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' :
-            tournament.status === 'Completed' ? 'bg-gray-100 text-gray-700' :
-            'bg-red-100 text-red-700'
-          }`}>
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+              tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+                tournament.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' :
+                  tournament.status === 'Completed' ? 'bg-gray-100 text-gray-700' :
+                    'bg-red-100 text-red-700'
+            }`}>
             {tournament.status}
           </span>
         </div>
@@ -3874,7 +3865,7 @@ const TournamentCard = ({ tournament, registrations, matches, onViewDetails, onG
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              
+
               if (onViewDetails && typeof onViewDetails === 'function') {
                 try {
                   onViewDetails();
@@ -3932,25 +3923,25 @@ const RegistrationApprovalCard = ({ registration, tournaments, onApprove, onReje
   // Get registrant name based on registration type
   let registrantName = 'Unknown';
   let registrantInfo = null;
-  
+
   if (registration.registration_type === 'Coach' && registration.coach_id) {
     const coach = registration.coach_id;
     const user = coach.user_id || {};
-    registrantName = user.first_name && user.last_name 
+    registrantName = user.first_name && user.last_name
       ? `${user.first_name} ${user.last_name}`
       : user.username || 'Coach';
     registrantInfo = 'Coach';
   } else if (registration.registration_type === 'Judge' && registration.judge_id) {
     const judge = registration.judge_id;
     const user = judge.user_id || {};
-    registrantName = user.first_name && user.last_name 
+    registrantName = user.first_name && user.last_name
       ? `${user.first_name} ${user.last_name}`
       : user.username || 'Judge';
     registrantInfo = 'Judge';
   } else if (registration.registration_type === 'Individual' && registration.player_id) {
     const player = registration.player_id;
     const user = player.user_id || {};
-    registrantName = user.first_name && user.last_name 
+    registrantName = user.first_name && user.last_name
       ? `${user.first_name} ${user.last_name}`
       : user.username || 'Player';
     registrantInfo = 'Player';
@@ -3966,12 +3957,11 @@ const RegistrationApprovalCard = ({ registration, tournaments, onApprove, onReje
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <p className="font-semibold text-gray-800">{tournament?.tournament_name || 'Tournament'}</p>
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-              registration.registration_type === 'Coach' ? 'bg-green-100 text-green-700' :
-              registration.registration_type === 'Judge' ? 'bg-orange-100 text-orange-700' :
-              registration.registration_type === 'Team' ? 'bg-purple-100 text-purple-700' :
-              'bg-blue-100 text-blue-700'
-            }`}>
+            <span className={`px-2 py-1 rounded text-xs font-semibold ${registration.registration_type === 'Coach' ? 'bg-green-100 text-green-700' :
+                registration.registration_type === 'Judge' ? 'bg-orange-100 text-orange-700' :
+                  registration.registration_type === 'Team' ? 'bg-purple-100 text-purple-700' :
+                    'bg-blue-100 text-blue-700'
+              }`}>
               {registration.registration_type}
             </span>
           </div>
@@ -3982,11 +3972,10 @@ const RegistrationApprovalCard = ({ registration, tournaments, onApprove, onReje
             Registered on {format(new Date(registration.registration_date), 'MMM dd, yyyy HH:mm')}
           </p>
           <div className="flex items-center gap-4 mt-2">
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              registration.approval_status === 'Approved' ? 'bg-green-100 text-green-700' :
-              registration.approval_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-red-100 text-red-700'
-            }`}>
+            <span className={`px-2 py-1 rounded text-xs font-medium ${registration.approval_status === 'Approved' ? 'bg-green-100 text-green-700' :
+                registration.approval_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+              }`}>
               Status: {registration.approval_status}
             </span>
             {(registration.registration_type === 'Coach' || registration.registration_type === 'Judge') ? (
@@ -3994,11 +3983,10 @@ const RegistrationApprovalCard = ({ registration, tournaments, onApprove, onReje
                 FREE Registration
               </span>
             ) : (
-              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                registration.payment_status === 'Paid' ? 'bg-green-100 text-green-700' :
-                registration.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-red-100 text-red-700'
-              }`}>
+              <span className={`px-2 py-1 rounded text-xs font-medium ${registration.payment_status === 'Paid' ? 'bg-green-100 text-green-700' :
+                  registration.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                }`}>
                 Payment: {registration.payment_status}
               </span>
             )}
@@ -4044,10 +4032,10 @@ const MatchCard = ({ match, tournaments, onViewDetails }) => {
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div className="flex-1">
-                          <p className="font-semibold text-gray-800">{match.match_name || 'Match'}</p>
-                          <p className="text-sm text-gray-600">
+          <p className="font-semibold text-gray-800">{match.match_name || 'Match'}</p>
+          <p className="text-sm text-gray-600">
             {tournament?.tournament_name || 'Tournament'} • {match.match_type}
           </p>
           <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
@@ -4062,16 +4050,15 @@ const MatchCard = ({ match, tournaments, onViewDetails }) => {
               </span>
             )}
           </div>
-                        </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-          match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
-          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {match.status}
-                        </span>
-                      </div>
-                    </div>
+        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+            match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-gray-100 text-gray-700'
+          }`}>
+          {match.status}
+        </span>
+      </div>
+    </div>
   );
 };
 
@@ -4165,7 +4152,7 @@ const TournamentResultsCard = ({ tournament, matches, scores, onCloseTournament,
           <p className="text-sm text-gray-600">
             {completedTournamentMatches.length} of {tournamentMatches.length} matches completed
           </p>
-              </div>
+        </div>
         {isOwner && tournament.status === 'Ongoing' && (
           <button
             onClick={onCloseTournament}
@@ -4231,10 +4218,10 @@ const KataPerformanceManagementModal = ({ category, tournament, registrations, k
     const regTournamentId = r.tournament_id?._id || r.tournament_id;
     const catTournamentId = category.tournament_id?._id || category.tournament_id;
     return String(regCategoryId) === String(category._id) &&
-           String(regTournamentId) === String(catTournamentId) &&
-           r.approval_status === 'Approved' &&
-           (r.payment_status === 'Paid' || r.registration_type === 'Coach' || r.registration_type === 'Judge') && // Coaches/Judges are free
-           r.registration_type === 'Individual';
+      String(regTournamentId) === String(catTournamentId) &&
+      r.approval_status === 'Approved' &&
+      (r.payment_status === 'Paid' || r.registration_type === 'Coach' || r.registration_type === 'Judge') && // Coaches/Judges are free
+      r.registration_type === 'Individual';
   });
 
   // Get existing performances for the selected round
@@ -4456,17 +4443,16 @@ const KataPerformanceManagementModal = ({ category, tournament, registrations, k
                       ? `${player.user_id.first_name || ''} ${player.user_id.last_name || ''}`.trim() || player.user_id.username
                       : 'Player';
                     const isSelected = selectedPlayerIds.includes(String(_id));
-                    
+
                     return (
                       <button
                         key={_id}
                         type="button"
                         onClick={() => handleTogglePlayer(String(_id))}
-                        className={`p-3 border-2 rounded-lg text-left transition ${
-                          isSelected
+                        className={`p-3 border-2 rounded-lg text-left transition ${isSelected
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div>
@@ -4539,7 +4525,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
       prevPerformancesForLocalRef.current = performances;
       return;
     }
-    
+
     // Check if performances actually changed by comparing IDs, score counts, and score values
     // This ensures we detect when individual scores are added/updated
     const createKey = (perfs) => {
@@ -4550,39 +4536,39 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
         return `${p._id}-${p.scores?.length || 0}-${p.final_score || 'null'}-${scoreKey}`;
       }).join('|');
     };
-    
+
     const currentKey = createKey(performances);
     const prevKey = prevPerformancesForLocalRef.current ? createKey(prevPerformancesForLocalRef.current) : null;
-    
+
     // Only update if there are actual changes
     if (currentKey !== prevKey) {
-    setLocalPerformances(performances);
+      setLocalPerformances(performances);
       prevPerformancesForLocalRef.current = performances;
     }
   }, [performances]);
 
   // Separate useEffect to populate saved scores, using useRef to track previous state
   const prevPerformancesRef = useRef(null);
-  
+
   useEffect(() => {
     if (!performances || performances.length === 0) {
       prevPerformancesRef.current = performances;
       return;
     }
-    
+
     // Check if performances actually changed by comparing IDs and score counts
     const currentKey = performances.map(p => `${p._id}-${p.scores?.length || 0}-${p.final_score || 'null'}`).join('|');
-    const prevKey = prevPerformancesRef.current 
+    const prevKey = prevPerformancesRef.current
       ? prevPerformancesRef.current.map(p => `${p._id}-${p.scores?.length || 0}-${p.final_score || 'null'}`).join('|')
       : null;
-    
+
     // Only update if performances actually changed
     if (currentKey === prevKey) {
       return;
     }
-    
+
     prevPerformancesRef.current = performances;
-    
+
     // IMPORTANT: We do NOT populate kataBulkScores with saved scores
     // Saved scores are displayed from performance.scores (existingScores) - that's the source of truth
     // kataBulkScores is ONLY for unsaved input
@@ -4591,12 +4577,12 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
     setKataBulkScores(prev => {
       const cleaned = { ...prev };
       let hasChanges = false;
-      
+
       // Clean up any unsaved input that matches saved scores (they're now saved, so remove from unsaved)
       performances.forEach(perf => {
         const perfId = String(perf._id);
         const unsavedInput = cleaned[perfId];
-        
+
         if (unsavedInput && perf.scores && perf.scores.length > 0) {
           // Get saved scores for this performance
           const savedScores = {};
@@ -4606,19 +4592,19 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
               savedScores[String(judgeId)] = score.kata_score.toString();
             }
           });
-          
+
           // Remove any input that matches saved scores (it's no longer "unsaved")
           const cleanedInput = {};
           Object.keys(unsavedInput).forEach(judgeId => {
             const inputValue = unsavedInput[judgeId];
             const savedValue = savedScores[judgeId];
-            
+
             // Only keep input if it's different from saved (truly unsaved)
             if (inputValue && inputValue.trim() !== '' && inputValue !== savedValue) {
               cleanedInput[judgeId] = inputValue;
             }
           });
-          
+
           // If all input matches saved scores, clear it (empty object)
           if (Object.keys(cleanedInput).length === 0) {
             if (Object.keys(unsavedInput).length > 0) {
@@ -4631,7 +4617,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
           }
         }
       });
-      
+
       // Only return new object if there are actual changes to prevent infinite loops
       return hasChanges ? cleaned : prev;
     });
@@ -4660,33 +4646,33 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
   const handleSavePlayer = async (performance) => {
     const performanceId = String(performance._id);
     const scores = kataBulkScores[performanceId] || {};
-    
+
     // Check if there are any scores to save
     const hasScoresToSave = Object.values(scores).some(score => score && score.trim() !== '');
     if (!hasScoresToSave) {
       toast.warning('Please enter at least one score before saving.');
       return;
     }
-    
+
     setSavingPlayerId(performanceId);
     try {
       const success = await onSavePlayerScores(performanceId, scores);
       if (success) {
         toast.success(`Scores saved for ${performance.player_id?.user_id?.first_name || 'player'}!`);
-        
+
         // Wait a bit for backend to process and calculate final scores
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         // Refresh all performances to get updated scores for ALL players
         // This ensures all saved scores are displayed, not just the one we just saved
         if (onRefresh) {
           await onRefresh();
         }
-        
+
         // Wait for data to refresh and backend to calculate final scores
         // Give enough time for the refresh to complete and state to update
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Clear unsaved input for THIS player only
         // CRITICAL: Saved scores will be displayed from performance.scores (existingScores) - NOT from kataBulkScores
         // This ensures other players' saved scores remain untouched
@@ -4698,7 +4684,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
           newScores[performanceId] = {};
           return newScores;
         });
-        
+
         // Force a small delay to ensure UI updates with saved scores
         // This ensures React has time to re-render with the updated performance data
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -4717,14 +4703,14 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
     // IMPORTANT: All saved scores must remain visible until this function is called
     // This function finalizes the round and advances to the next round
     // Until this point, all players' individual judge scores should be displayed
-    
+
     // First, refresh data to ensure we have the latest scores before checking
     if (onRefresh) {
       await onRefresh();
       // Wait a bit for state to update
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
+
     // Use performances prop directly (not sortedPerformances) to ensure we have the latest data
     // Sort performances for checking (same logic as sortedPerformances)
     const performancesToCheck = [...(performances || [])].sort((a, b) => {
@@ -4733,17 +4719,17 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
       if (a.final_score === null && b.final_score === null) return a.performance_order - b.performance_order;
       return b.final_score - a.final_score;
     });
-    
+
     // Check if all players have scores (either saved or unsaved)
     // CRITICAL: Check saved scores from performance.scores (database) AND unsaved input from kataBulkScores
     // Also check final_score as an indicator that scores have been calculated
     const playersWithoutScores = performancesToCheck.filter(perf => {
       const performanceId = String(perf._id);
-      
+
       // Check for unsaved scores in kataBulkScores
       const unsavedScores = kataBulkScores[performanceId] || {};
       const hasUnsavedScores = Object.values(unsavedScores).some(score => score && score.trim() !== '');
-      
+
       // Check for saved scores in performance.scores (from database)
       // This is the PRIMARY check - saved scores are the source of truth
       const savedScores = perf.scores || [];
@@ -4752,16 +4738,16 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
         return judgeId && score.kata_score !== null && score.kata_score !== undefined;
       });
       const hasSavedScores = validSavedScores.length >= 3; // Need at least 3 judge scores
-      
+
       // Check if final_score exists - this is a strong indicator that scores are saved and calculated
       const hasFinalScore = perf.final_score !== null && perf.final_score !== undefined;
-      
+
       // Player has scores if:
       // 1. Has at least 3 saved scores (from database), OR
       // 2. Has a final_score (indicates scores were saved and calculated), OR
       // 3. Has unsaved scores that need to be saved (but this should be saved first)
       const hasScores = hasSavedScores || hasFinalScore || hasUnsavedScores;
-      
+
       return !hasScores;
     });
 
@@ -4775,7 +4761,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
         const hasFinal = p.final_score !== null && p.final_score !== undefined;
         return `${playerName} (${scoreCount} scores, final: ${hasFinal ? p.final_score : 'none'})`;
       }).join(', ');
-      
+
       console.warn('Players without sufficient scores:', {
         count: playersWithoutScores.length,
         players: playersWithoutScores.map(p => ({
@@ -4786,7 +4772,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
           scores: p.scores
         }))
       });
-      
+
       toast.warning(`Please save scores for all ${playersWithoutScores.length} player(s) before finalizing the round. Each player needs scores from at least 3 judges. Missing: ${playerDetails}`);
       return;
     }
@@ -4804,7 +4790,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
   const calculatePreviewFinal = (performance) => {
     const performanceId = String(performance._id);
     const scores = kataBulkScores[performanceId] || {};
-    
+
     const allScores = [];
     availableJudges.forEach(judge => {
       const judgeId = String(judge._id);
@@ -4876,7 +4862,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
 
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
           <p className="text-sm text-yellow-800">
-            <strong>Instructions:</strong> Enter scores for all 5 judges for each player. Click "Save" for each player to save their scores. 
+            <strong>Instructions:</strong> Enter scores for all 5 judges for each player. Click "Save" for each player to save their scores.
             When all players are scored, click "Finalize Round" to advance top {topCount || 'players'} to {nextRound || 'the next round'}.
           </p>
         </div>
@@ -4946,7 +4932,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                 const hasSavedScores = performance.scores && performance.scores.length > 0;
                 const hasEnoughScores = performance.scores && performance.scores.length >= 3;
                 const isSaved = hasSavedScores;
-                
+
                 // Check if there are any unsaved changes (scores in kataBulkScores that differ from saved scores)
                 const hasUnsavedChanges = Object.keys(scores).some(judgeId => {
                   const inputScore = scores[judgeId]?.trim();
@@ -4954,7 +4940,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                   // If there's an input score and it's different from saved, or there's no saved score
                   return inputScore && inputScore !== '' && inputScore !== savedScore;
                 });
-                
+
                 return (
                   <div key={performance._id} className={`border rounded-lg p-4 transition ${isSaved ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white hover:shadow-md'}`}>
                     <div className="grid grid-cols-6 gap-2 items-center">
@@ -4963,20 +4949,18 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                           <p className="font-semibold text-gray-800">{playerName}</p>
                           {/* Display ranking for Final 4 round */}
                           {round === 'Third Round (Final 4)' && performance.place !== null && performance.place !== undefined && (
-                            <span className={`px-3 py-1 text-white text-xs rounded-full font-bold shadow-sm ${
-                              performance.place === 1 ? 'bg-yellow-500' :
-                              performance.place === 2 ? 'bg-gray-400' :
-                              'bg-orange-500'
-                            }`}>
+                            <span className={`px-3 py-1 text-white text-xs rounded-full font-bold shadow-sm ${performance.place === 1 ? 'bg-yellow-500' :
+                                performance.place === 2 ? 'bg-gray-400' :
+                                  'bg-orange-500'
+                              }`}>
                               {performance.place === 1 ? '🥇 1st Place' :
-                               performance.place === 2 ? '🥈 2nd Place' :
-                               '🥉 3rd Place'}
+                                performance.place === 2 ? '🥈 2nd Place' :
+                                  '🥉 3rd Place'}
                             </span>
                           )}
                           {isSaved && (
-                            <span className={`px-3 py-1 text-white text-xs rounded-full font-bold shadow-sm ${
-                              hasEnoughScores ? 'bg-green-600' : 'bg-yellow-500'
-                            }`}>
+                            <span className={`px-3 py-1 text-white text-xs rounded-full font-bold shadow-sm ${hasEnoughScores ? 'bg-green-600' : 'bg-yellow-500'
+                              }`}>
                               {hasEnoughScores ? '✓ Saved' : `${performance.scores.length}/5 Saved`}
                             </span>
                           )}
@@ -5003,23 +4987,23 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                         // Get saved score from performance.scores - this is the source of truth
                         const savedScore = existingScores[judgeId];
                         const inputScore = scores[judgeId];
-                        
+
                         // CRITICAL: Display logic - saved scores come from performance.scores, NOT kataBulkScores
                         // IMPORTANT: Saved scores MUST persist and remain visible for ALL players until "Finalize & Advance" is clicked
                         // PRIORITY ORDER:
                         // 1. If there's unsaved input that's DIFFERENT from saved, show input (unsaved) - user is editing
                         // 2. ALWAYS show saved score from performance.scores if available - this is the source of truth
                         // 3. Otherwise, show empty (no score entered yet)
-                        
+
                         // Check if there's unsaved input that differs from saved
                         const hasUnsavedInput = inputScore && inputScore.trim() !== '' && inputScore !== savedScore;
-                        
+
                         // Determine what to display in the input field
                         // CRITICAL: Always show saved score if available - this is the PRIMARY source
                         // Saved scores MUST be displayed for ALL players until finalization
                         // Only show unsaved input if it's DIFFERENT from the saved score
                         let currentScore = '';
-                        
+
                         // Priority 1: If there's a saved score, ALWAYS show it (unless user is editing with different value)
                         // This ensures saved scores persist for all players until finalization
                         if (savedScore && savedScore !== '') {
@@ -5039,7 +5023,7 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                           // No saved score and no input - show empty
                           currentScore = '';
                         }
-                        
+
                         // Determine if this field has a saved score
                         const hasExistingScore = savedScore !== undefined && savedScore !== null && savedScore !== '';
                         // Field is saved if it has a saved score AND there's no unsaved input that differs
@@ -5055,13 +5039,12 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                               min="5.0"
                               max="10.0"
                               step="0.1"
-                              className={`w-full px-2 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-sm font-semibold ${
-                                isFieldSaved
-                                  ? 'border-green-500 bg-green-100 text-green-800' 
+                              className={`w-full px-2 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-sm font-semibold ${isFieldSaved
+                                  ? 'border-green-500 bg-green-100 text-green-800'
                                   : hasUnsavedInput
-                                  ? 'border-blue-400 bg-blue-100 text-blue-800'
-                                  : 'border-gray-300 bg-white'
-                              }`}
+                                    ? 'border-blue-400 bg-blue-100 text-blue-800'
+                                    : 'border-gray-300 bg-white'
+                                }`}
                               placeholder={isFieldSaved ? '' : '5.0-10.0'}
                               readOnly={isFieldSaved}
                               disabled={isFieldSaved}
@@ -5088,19 +5071,18 @@ const KataBulkScoringModal = ({ category, tournament, round, performances, judge
                         type="button"
                         onClick={() => handleSavePlayer(performance)}
                         disabled={isSaving || (!hasUnsavedChanges && hasSavedScores)}
-                        className={`px-4 py-2 rounded-lg transition text-sm font-semibold ${
-                          !hasUnsavedChanges && hasSavedScores
-                            ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
+                        className={`px-4 py-2 rounded-lg transition text-sm font-semibold ${!hasUnsavedChanges && hasSavedScores
+                            ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                             : 'bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed'
-                        }`}
+                          }`}
                       >
-                        {isSaving 
-                          ? 'Saving...' 
-                          : (!hasUnsavedChanges && hasSavedScores) 
-                          ? 'All Scores Saved ✓' 
-                          : hasUnsavedChanges
-                          ? 'Save Scores'
-                          : 'Save Scores'}
+                        {isSaving
+                          ? 'Saving...'
+                          : (!hasUnsavedChanges && hasSavedScores)
+                            ? 'All Scores Saved ✓'
+                            : hasUnsavedChanges
+                              ? 'Save Scores'
+                              : 'Save Scores'}
                       </button>
                     </div>
                   </div>

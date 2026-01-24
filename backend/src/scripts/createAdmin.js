@@ -1,11 +1,21 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
-require('dotenv').config();
+const path = require('path');
+// Load env vars from the root directory
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const createAdmin = async () => {
   try {
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI, {
+    // Check both common env var names
+    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+
+    if (!mongoUri) {
+      console.error('❌ Error: MONGO_URI or MONGODB_URI is not defined in .env file');
+      process.exit(1);
+    }
+
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
@@ -13,7 +23,7 @@ const createAdmin = async () => {
 
     // Check if admin already exists
     const existingAdmin = await User.findOne({ email: 'admin@gmail.com' });
-    
+
     if (existingAdmin) {
       // Update existing admin password
       existingAdmin.password_hash = 'Admin@123';

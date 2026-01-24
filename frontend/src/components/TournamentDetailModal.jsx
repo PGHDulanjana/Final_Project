@@ -22,6 +22,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
   const isOrganizer = user?.user_type === 'Organizer';
   const isCoach = user?.user_type === 'Coach';
   const isPlayer = user?.user_type === 'Player';
+  const isJudge = user?.user_type === 'Judge';
   const [tournament, setTournament] = useState(null);
   const [categories, setCategories] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -61,6 +62,8 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
   const [kataReports, setKataReports] = useState({}); // { categoryId: report }
   const [kumiteReports, setKumiteReports] = useState({}); // { categoryId: report }
   const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedKataReportCategoryId, setSelectedKataReportCategoryId] = useState(null);
+  const [selectedKumiteReportCategoryId, setSelectedKumiteReportCategoryId] = useState(null);
 
   useEffect(() => {
     if (tournamentId) {
@@ -286,6 +289,14 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
       });
 
       setKataReports(reportsMap);
+
+      // If no Kata category is selected yet, default to the first one with a report
+      if (!selectedKataReportCategoryId) {
+        const firstCategoryId = Object.keys(reportsMap)[0];
+        if (firstCategoryId) {
+          setSelectedKataReportCategoryId(firstCategoryId);
+        }
+      }
     } catch (error) {
       console.error('Error loading Kata reports:', error);
     } finally {
@@ -327,6 +338,14 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
       });
 
       setKumiteReports(reportsMap);
+
+      // If no Kumite category is selected yet, default to the first one with a report
+      if (!selectedKumiteReportCategoryId) {
+        const firstCategoryId = Object.keys(reportsMap)[0];
+        if (firstCategoryId) {
+          setSelectedKumiteReportCategoryId(firstCategoryId);
+        }
+      }
     } catch (error) {
       console.error('Error loading Kumite reports:', error);
     }
@@ -846,7 +865,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
           )}
 
           {/* Kata Reports Section - Show published reports for Kata events */}
-          {((isCoach || isPlayer) && categories.some(cat => (cat.category_type === 'Kata' || cat.category_type === 'Team Kata'))) && (
+          {((isCoach || isPlayer || isOrganizer || isJudge) && categories.some(cat => (cat.category_type === 'Kata' || cat.category_type === 'Team Kata'))) && (
             <div className="mb-6">
               <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <FiFileText className="w-5 h-5 text-blue-600" />
@@ -880,16 +899,40 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                     );
                   }
 
+                  const activeCategoryId =
+                    selectedKataReportCategoryId && kataCategoriesWithReports.some(cat => cat._id === selectedKataReportCategoryId)
+                      ? selectedKataReportCategoryId
+                      : kataCategoriesWithReports[0]?._id;
+
                   return (
-                    <div className="space-y-6">
-                      {kataCategoriesWithReports.map(category => (
-                        <div key={category._id}>
-                          <h4 className="text-lg font-semibold text-gray-800 mb-3">
-                            {category.category_name}
-                          </h4>
-                          <KataReportView report={kataReports[category._id]} />
+                    <div>
+                      {/* Category selector */}
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {kataCategoriesWithReports.map(category => {
+                          const isActive = activeCategoryId === category._id;
+                          return (
+                            <button
+                              key={category._id}
+                              type="button"
+                              onClick={() => setSelectedKataReportCategoryId(category._id)}
+                              className={`px-3 py-1 rounded-full text-sm font-medium border transition ${
+                                isActive
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                  : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
+                              }`}
+                            >
+                              {category.category_name}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Active report */}
+                      {activeCategoryId && kataReports[activeCategoryId] && (
+                        <div className="space-y-6">
+                          <KataReportView report={kataReports[activeCategoryId]} />
                         </div>
-                      ))}
+                      )}
                     </div>
                   );
                 })()
@@ -898,7 +941,7 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
           )}
 
           {/* Kumite Reports Section - Show published reports for Kumite events */}
-          {((isCoach || isPlayer) && categories.some(cat => (cat.category_type === 'Kumite' || cat.category_type === 'Team Kumite'))) && (
+          {((isCoach || isPlayer || isOrganizer || isJudge) && categories.some(cat => (cat.category_type === 'Kumite' || cat.category_type === 'Team Kumite'))) && (
             <div className="mb-6">
               <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <FiFileText className="w-5 h-5 text-red-600" />
@@ -926,16 +969,40 @@ const TournamentDetailModal = ({ tournamentId, onClose, onRegister, onPayment })
                   );
                 }
 
+                const activeCategoryId =
+                  selectedKumiteReportCategoryId && kumiteCategoriesWithReports.some(cat => cat._id === selectedKumiteReportCategoryId)
+                    ? selectedKumiteReportCategoryId
+                    : kumiteCategoriesWithReports[0]?._id;
+
                 return (
-                  <div className="space-y-6">
-                    {kumiteCategoriesWithReports.map(category => (
-                      <div key={category._id}>
-                        <h4 className="text-lg font-semibold text-gray-800 mb-3">
-                          {category.category_name}
-                        </h4>
-                        <KumiteReportView report={kumiteReports[category._id]} />
+                  <div>
+                    {/* Category selector */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {kumiteCategoriesWithReports.map(category => {
+                        const isActive = activeCategoryId === category._id;
+                        return (
+                          <button
+                            key={category._id}
+                            type="button"
+                            onClick={() => setSelectedKumiteReportCategoryId(category._id)}
+                            className={`px-3 py-1 rounded-full text-sm font-medium border transition ${
+                              isActive
+                                ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-red-50'
+                            }`}
+                          >
+                            {category.category_name}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Active report */}
+                    {activeCategoryId && kumiteReports[activeCategoryId] && (
+                      <div className="space-y-6">
+                        <KumiteReportView report={kumiteReports[activeCategoryId]} />
                       </div>
-                    ))}
+                    )}
                   </div>
                 );
               })()}

@@ -46,5 +46,14 @@ export const matchService = {
     const response = await api.post(`/matches/${matchId}/calculate-winner`);
     return response.data;
   },
+
+  // Generate next round matches
+  generateNextRound: async (categoryId, currentRoundLevel) => {
+    const response = await api.post('/matches/generate-next-round', {
+      category_id: categoryId,
+      current_round_level: currentRoundLevel
+    });
+    return response.data;
+  },
 };
 

@@ -73,7 +73,10 @@ const OrganizerPayments = () => {
     let filtered = registrations;
 
     if (selectedTournament !== 'all') {
-      filtered = filtered.filter(r => r.tournament_id === selectedTournament);
+      filtered = filtered.filter(r => {
+        const tId = r.tournament_id?._id || r.tournament_id;
+        return tId === selectedTournament;
+      });
     }
 
     if (filterPayment !== 'all') {
@@ -87,9 +90,14 @@ const OrganizerPayments = () => {
     return filteredRegistrations
       .filter(r => r.payment_status === 'Paid')
       .reduce((sum, r) => {
-        const tournament = tournaments.find(t => t._id === r.tournament_id);
-        if (tournament) {
-          return sum + (r.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual);
+        // Use fee from category if available, otherwise 0
+        // fee logic: if Team registration, use team_event_fee, else individual_player_fee
+        const category = r.category_id;
+        if (category) {
+          const fee = r.registration_type === 'Team'
+            ? (category.team_event_fee || 0)
+            : (category.individual_player_fee || 0);
+          return sum + fee;
         }
         return sum;
       }, 0);
@@ -100,13 +108,19 @@ const OrganizerPayments = () => {
     filteredRegistrations
       .filter(r => r.payment_status === 'Paid')
       .forEach(r => {
-        const tournament = tournaments.find(t => t._id === r.tournament_id);
-        if (tournament) {
+        const tId = r.tournament_id?._id || r.tournament_id;
+        const tournament = tournaments.find(t => t._id === tId);
+        // Still need tournament for the name, but fee comes from category
+        const category = r.category_id;
+
+        if (tournament && category) {
           if (!tournamentPayments[tournament.tournament_name]) {
             tournamentPayments[tournament.tournament_name] = 0;
           }
-          tournamentPayments[tournament.tournament_name] +=
-            r.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual;
+          const fee = r.registration_type === 'Team'
+            ? (category.team_event_fee || 0)
+            : (category.individual_player_fee || 0);
+          tournamentPayments[tournament.tournament_name] += fee;
         }
       });
 
@@ -281,13 +295,15 @@ const OrganizerPayments = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredRegistrations.map((registration) => {
-                    const tournament = tournaments.find(t => t._id === registration.tournament_id);
+                    const tId = registration.tournament_id?._id || registration.tournament_id;
+                    const tournament = tournaments.find(t => t._id === tId);
                     const participantName = registration.player_id?.user_id?.username ||
-                                          registration.player_id?.user_id?.first_name ||
-                                          registration.team_id?.team_name ||
-                                          'N/A';
-                    const amount = tournament
-                      ? (registration.registration_type === 'Team' ? tournament.entry_fee_team : tournament.entry_fee_individual)
+                      registration.player_id?.user_id?.first_name ||
+                      registration.team_id?.team_name ||
+                      'N/A';
+                    const category = registration.category_id;
+                    const amount = category
+                      ? (registration.registration_type === 'Team' ? (category.team_event_fee || 0) : (category.individual_player_fee || 0))
                       : 0;
 
                     return (
@@ -303,9 +319,8 @@ const OrganizerPayments = () => {
                         </td>
                         <td className="px-6 py-4 font-bold text-gray-800">Rs {amount.toFixed(2)}</td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            registration.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${registration.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                            }`}>
                             {registration.payment_status}
                           </span>
                         </td>

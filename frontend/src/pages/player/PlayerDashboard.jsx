@@ -35,7 +35,7 @@ const PlayerDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  
+
   // Data states
   const [tournaments, setTournaments] = useState([]);
   const [registrations, setRegistrations] = useState([]);
@@ -53,14 +53,14 @@ const PlayerDashboard = () => {
     averageScore: 0,
     recentMatches: []
   });
-  
+
   // UI states
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
   const [activeTab, setActiveTab] = useState('matches');
 
   useEffect(() => {
     if (user) {
-    loadData();
+      loadData();
     }
   }, [user]);
 
@@ -81,10 +81,10 @@ const PlayerDashboard = () => {
 
   const loadData = async () => {
     if (!user?._id) return;
-    
+
     try {
       setLoading(true);
-      
+
       // Get player profile to find coach
       let playerProfileData = null;
       try {
@@ -98,7 +98,7 @@ const PlayerDashboard = () => {
       } catch (error) {
         console.error('Error loading player profile:', error);
       }
-      
+
       const [tournamentsRes, registrationsRes, matchesRes, categoriesRes, scoresRes, notificationsRes] = await Promise.all([
         tournamentService.getTournaments(),
         registrationService.getRegistrations(),
@@ -110,11 +110,11 @@ const PlayerDashboard = () => {
 
       const allTournaments = tournamentsRes.data || [];
       const allRegistrations = registrationsRes.data || [];
-      
+
       // Show all tournaments created by organizers (not filtered by coach registration)
       // Players can see all tournaments, but can only register for events in tournaments where their coach is registered
       setTournaments(allTournaments);
-      
+
       setRegistrations(allRegistrations);
       setMatches(matchesRes.data || []);
       setCategories(categoriesRes.data || []);
@@ -130,7 +130,9 @@ const PlayerDashboard = () => {
       setPerformanceData(perfData);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      if (error.response?.status !== 401) {
+        toast.error('Failed to load dashboard data');
+      }
     } finally {
       setLoading(false);
     }
@@ -276,8 +278,8 @@ const PlayerDashboard = () => {
                   </span>
                 </button>
               )}
-              </div>
-              
+            </div>
+
             {/* Tabs */}
             <div className="flex space-x-2 border-b border-gray-200 overflow-x-auto">
               {[
@@ -292,11 +294,10 @@ const PlayerDashboard = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-6 py-3 font-medium transition whitespace-nowrap ${
-                      activeTab === tab.id
+                    className={`flex items-center gap-2 px-6 py-3 font-medium transition whitespace-nowrap ${activeTab === tab.id
                         ? 'border-b-2 border-blue-600 text-blue-600'
                         : 'text-gray-600 hover:text-gray-800'
-                    }`}
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                     {tab.label}
@@ -341,8 +342,8 @@ const PlayerDashboard = () => {
                       const regPlayerId = r.player_id?._id || r.player_id;
                       const playerId = playerProfile?._id;
                       return (regTournamentId === tournament._id || regTournamentId?.toString() === tournament._id?.toString()) &&
-                             (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
-                             r.registration_type === 'Individual';
+                        (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
+                        r.registration_type === 'Individual';
                     });
 
                     return (
@@ -355,11 +356,10 @@ const PlayerDashboard = () => {
                             </p>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-                              tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+                                tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                              }`}>
                               {tournament.status}
                             </span>
                             <button
@@ -378,7 +378,7 @@ const PlayerDashboard = () => {
                               {tournamentRegistrations.map((registration) => {
                                 const category = registration.category_id || {};
                                 const isIndividual = registration.registration_type === 'Individual';
-                                
+
                                 return (
                                   <div
                                     key={registration._id}
@@ -388,11 +388,10 @@ const PlayerDashboard = () => {
                                       <div className="flex-1">
                                         <h5 className="font-semibold text-gray-800 mb-1">{category.category_name || 'Event'}</h5>
                                         <div className="flex items-center gap-2 mb-2">
-                                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                            category.category_type === 'Kata' || category.category_type === 'Team Kata'
+                                          <span className={`px-2 py-1 rounded text-xs font-semibold ${category.category_type === 'Kata' || category.category_type === 'Team Kata'
                                               ? 'bg-blue-100 text-blue-700'
                                               : 'bg-red-100 text-red-700'
-                                          }`}>
+                                            }`}>
                                             {category.category_type || 'Event'}
                                           </span>
                                         </div>
@@ -404,20 +403,18 @@ const PlayerDashboard = () => {
                                       {category.weight_category && <p><span className="font-medium">Weight:</span> {category.weight_category}</p>}
                                     </div>
                                     <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        registration.approval_status === 'Approved' 
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${registration.approval_status === 'Approved'
                                           ? 'bg-green-100 text-green-700'
                                           : registration.approval_status === 'Pending'
-                                          ? 'bg-yellow-100 text-yellow-700'
-                                          : 'bg-red-100 text-red-700'
-                                      }`}>
+                                            ? 'bg-yellow-100 text-yellow-700'
+                                            : 'bg-red-100 text-red-700'
+                                        }`}>
                                         {registration.approval_status}
                                       </span>
-                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        registration.payment_status === 'Paid'
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${registration.payment_status === 'Paid'
                                           ? 'bg-green-100 text-green-700'
                                           : 'bg-yellow-100 text-yellow-700'
-                                      }`}>
+                                        }`}>
                                         {registration.payment_status === 'Paid' ? 'Paid' : 'Payment Pending'}
                                       </span>
                                     </div>
@@ -436,14 +433,14 @@ const PlayerDashboard = () => {
                 const regPlayerId = r.player_id?._id || r.player_id;
                 const playerId = playerProfile?._id;
                 return (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
-                       r.registration_type === 'Individual';
+                  r.registration_type === 'Individual';
               }).length === 0 && (
-                <div className="text-center py-8 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-gray-700 mb-4">
-                    You haven't registered for any events yet. Click "View Events" on any tournament above to see available events and register.
-                  </p>
-                </div>
-              )}
+                  <div className="text-center py-8 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-gray-700 mb-4">
+                      You haven't registered for any events yet. Click "View Events" on any tournament above to see available events and register.
+                    </p>
+                  </div>
+                )}
             </div>
           )}
 
@@ -451,7 +448,7 @@ const PlayerDashboard = () => {
           {activeTab === 'performance' && (
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-6">My Performance</h2>
-              
+
               {/* Performance Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500 hover:shadow-xl transition-shadow">
@@ -518,13 +515,12 @@ const PlayerDashboard = () => {
                           </div>
                           <div>
                             <span
-                              className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                match.result === 'Win'
+                              className={`px-3 py-1 rounded-full text-sm font-semibold ${match.result === 'Win'
                                   ? 'bg-green-100 text-green-700'
                                   : match.result === 'Loss'
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-yellow-100 text-yellow-700'
-                              }`}
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-yellow-100 text-yellow-700'
+                                }`}
                             >
                               {match.result}
                             </span>
@@ -552,16 +548,16 @@ const PlayerDashboard = () => {
                 const regPlayerId = r.player_id?._id || r.player_id;
                 const playerId = playerProfile?._id;
                 return (regPlayerId === playerId || regPlayerId?.toString() === playerId?.toString()) &&
-                       r.registration_type === 'Individual' &&
-                       r.approval_status === 'Approved' &&
-                       r.payment_status === 'Paid';
+                  r.registration_type === 'Individual' &&
+                  r.approval_status === 'Approved' &&
+                  r.payment_status === 'Paid';
               })
               .map(r => r.category_id?._id || r.category_id)
               .filter(Boolean);
 
             // Get categories for registered events
-            const registeredCategories = categories.filter(c => 
-              playerRegisteredEvents.some(eventId => 
+            const registeredCategories = categories.filter(c =>
+              playerRegisteredEvents.some(eventId =>
                 c._id?.toString() === eventId?.toString() || c._id === eventId
               )
             );
@@ -624,17 +620,16 @@ const PlayerDashboard = () => {
                     {Object.values(matchesByCategory).map(({ category, matches: categoryMatches }) => {
                       const isKata = category.category_type === 'Kata' || category.category_type === 'Team Kata';
                       const isKumite = category.category_type === 'Kumite' || category.category_type === 'Team Kumite';
-                      
+
                       return (
                         <div key={category._id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
                           <div className="mb-4">
                             <div className="flex items-center justify-between mb-2">
                               <h3 className="text-xl font-bold text-gray-800">{category.category_name}</h3>
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                isKata ? 'bg-blue-100 text-blue-700' :
-                                isKumite ? 'bg-red-100 text-red-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${isKata ? 'bg-blue-100 text-blue-700' :
+                                  isKumite ? 'bg-red-100 text-red-700' :
+                                    'bg-gray-100 text-gray-700'
+                                }`}>
                                 {category.category_type}
                               </span>
                             </div>
@@ -642,9 +637,9 @@ const PlayerDashboard = () => {
                               {category.participation_type} • {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
                             </p>
                           </div>
-                          
-                          <MatchDrawsBracket 
-                            matches={categoryMatches} 
+
+                          <MatchDrawsBracket
+                            matches={categoryMatches}
                             category={category}
                           />
                         </div>
@@ -665,13 +660,13 @@ const PlayerDashboard = () => {
                   <FiAward className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">No Completed Matches</h3>
                   <p className="text-gray-600">Your match results will appear here</p>
-                  </div>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {completedMatches.map((match) => (
                     <DetailedResultCard key={match._id} match={match} user={user} />
-                ))}
-              </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -715,7 +710,7 @@ const PlayerDashboard = () => {
 // Match Card Component
 const MatchCard = ({ match, user, onViewDetails }) => {
   const opponent = match.opponent;
-  const opponentName = opponent?.player_id?.user_id?.first_name 
+  const opponentName = opponent?.player_id?.user_id?.first_name
     ? `${opponent.player_id.user_id.first_name} ${opponent.player_id.user_id.last_name || ''}`
     : 'TBD';
 
@@ -723,11 +718,10 @@ const MatchCard = ({ match, user, onViewDetails }) => {
     <div className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition bg-gradient-to-br from-white to-blue-50">
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-bold text-lg text-gray-800 flex-1">{match.match_name || 'Match'}</h3>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
-          match.status === 'In Progress' ? 'bg-green-100 text-green-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
+            match.status === 'In Progress' ? 'bg-green-100 text-green-700' :
+              'bg-gray-100 text-gray-700'
+          }`}>
           {match.status}
         </span>
       </div>
@@ -747,20 +741,20 @@ const MatchCard = ({ match, user, onViewDetails }) => {
           vs {opponentName}
         </div>
       </div>
-              <button
-        onClick={onViewDetails || (() => {})}
+      <button
+        onClick={onViewDetails || (() => { })}
         className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
       >
         View Details
-              </button>
-            </div>
+      </button>
+    </div>
   );
 };
 
 // Detailed Match Card Component
 const DetailedMatchCard = ({ match, user }) => {
   const opponent = match.opponent;
-  const opponentName = opponent?.player_id?.user_id?.first_name 
+  const opponentName = opponent?.player_id?.user_id?.first_name
     ? `${opponent.player_id.user_id.first_name} ${opponent.player_id.user_id.last_name || ''}`
     : 'TBD';
 
@@ -784,31 +778,30 @@ const DetailedMatchCard = ({ match, user }) => {
                 Tatami {match.tatami_number}
               </span>
             )}
-                </div>
-              </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
-          match.status === 'In Progress' ? 'bg-green-100 text-green-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
+          </div>
+        </div>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
+            match.status === 'In Progress' ? 'bg-green-100 text-green-700' :
+              'bg-gray-100 text-gray-700'
+          }`}>
           {match.status}
         </span>
       </div>
       <div className="bg-gray-50 rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between">
-                        <div>
+          <div>
             <p className="text-sm text-gray-600 mb-1">You</p>
             <p className="font-semibold text-gray-800">
               {user?.first_name} {user?.last_name}
             </p>
-                        </div>
+          </div>
           <div className="text-2xl font-bold text-gray-400">VS</div>
           <div className="text-right">
             <p className="text-sm text-gray-600 mb-1">Opponent</p>
             <p className="font-semibold text-gray-800">{opponentName}</p>
-                        </div>
-                    </div>
-                  </div>
+          </div>
+        </div>
+      </div>
       {match.tournament_id && (
         <div className="text-sm text-gray-600 mb-2">
           Tournament: {match.tournament_id.tournament_name || 'Tournament'}
@@ -821,15 +814,15 @@ const DetailedMatchCard = ({ match, user }) => {
 // Result Card Component
 const ResultCard = ({ match, user }) => {
   const opponent = match.opponent;
-  const opponentName = opponent?.player_id?.user_id?.first_name 
+  const opponentName = opponent?.player_id?.user_id?.first_name
     ? `${opponent.player_id.user_id.first_name} ${opponent.player_id.user_id.last_name || ''}`
     : 'TBD';
-  
+
   const playerScore = match.matchScores?.find(s => {
     const participantId = s.participant_id?._id || s.participant_id;
     return participantId?.toString() === (match.playerParticipant._id?.toString() || match.playerParticipant._id);
   });
-  
+
   const opponentScore = match.matchScores?.find(s => {
     const participantId = s.participant_id?._id || s.participant_id;
     return participantId?.toString() !== (match.playerParticipant._id?.toString() || match.playerParticipant._id);
@@ -860,27 +853,26 @@ const ResultCard = ({ match, user }) => {
           <span className="font-bold">{opponentScore?.final_score || 'N/A'}</span>
         </div>
       </div>
-      <div className={`text-center py-2 rounded-lg font-semibold ${
-        isWinner ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-      }`}>
+      <div className={`text-center py-2 rounded-lg font-semibold ${isWinner ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        }`}>
         {isWinner ? 'Winner' : 'Lost'}
-                    </div>
-                  </div>
+      </div>
+    </div>
   );
 };
 
 // Detailed Result Card Component
 const DetailedResultCard = ({ match, user }) => {
   const opponent = match.opponent;
-  const opponentName = opponent?.player_id?.user_id?.first_name 
+  const opponentName = opponent?.player_id?.user_id?.first_name
     ? `${opponent.player_id.user_id.first_name} ${opponent.player_id.user_id.last_name || ''}`
     : 'TBD';
-  
+
   const playerScore = match.matchScores?.find(s => {
     const participantId = s.participant_id?._id || s.participant_id;
     return participantId?.toString() === (match.playerParticipant._id?.toString() || match.playerParticipant._id);
   });
-  
+
   const opponentScore = match.matchScores?.find(s => {
     const participantId = s.participant_id?._id || s.participant_id;
     return participantId?.toString() !== (match.playerParticipant._id?.toString() || match.playerParticipant._id);
@@ -899,8 +891,8 @@ const DetailedResultCard = ({ match, user }) => {
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span>{format(new Date(match.scheduled_time), 'MMM dd, yyyy')}</span>
             {match.tatami_number && <span>Tatami {match.tatami_number}</span>}
-                  </div>
-                </div>
+          </div>
+        </div>
         {isWinner ? (
           <div className="flex items-center gap-2 text-green-600">
             <FiAward className="w-6 h-6" />
@@ -919,22 +911,22 @@ const DetailedResultCard = ({ match, user }) => {
           <p className="font-bold text-xl text-blue-600">{playerScore?.final_score || 'N/A'}</p>
           {playerScore && (
             <div className="text-xs text-gray-600 mt-2">
-              Technical: {playerScore.technical_score || 'N/A'} | 
+              Technical: {playerScore.technical_score || 'N/A'} |
               Performance: {playerScore.performance_score || 'N/A'}
             </div>
           )}
-                </div>
+        </div>
         <div className="bg-gray-50 rounded-lg p-4">
           <p className="text-sm text-gray-600 mb-1">{opponentName}</p>
           <p className="font-bold text-xl text-gray-600">{opponentScore?.final_score || 'N/A'}</p>
           {opponentScore && (
             <div className="text-xs text-gray-600 mt-2">
-              Technical: {opponentScore.technical_score || 'N/A'} | 
+              Technical: {opponentScore.technical_score || 'N/A'} |
               Performance: {opponentScore.performance_score || 'N/A'}
             </div>
           )}
-            </div>
-          </div>
+        </div>
+      </div>
       {playerScore?.comments && (
         <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600 italic">
           "{playerScore.comments}"
@@ -951,7 +943,7 @@ const RegistrationCard = ({ registration, onViewDetails }) => {
 
   return (
     <div className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition cursor-pointer"
-      onClick={onViewDetails || (() => {})}>
+      onClick={onViewDetails || (() => { })}>
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-bold text-lg text-gray-800 flex-1">{tournamentName}</h3>
         <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">

@@ -1,0 +1,572 @@
+
+> xpertkarate-backend@1.0.0 test
+> cross-env NODE_ENV=test jest tests/integration
+
+(node:19668) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:8964) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:9756) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:24276) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:16648) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  console.log
+    📝 Backend - Creating user with data: {
+      username: 'testuser',
+      email: 'test@example.com',
+      password_hash: '***hidden***',
+      first_name: 'Test',
+      last_name: 'User',
+      user_type: 'Player',
+      gender: 'Male',
+      hasGender: true,
+      genderValue: 'Male'
+    }
+
+      at log (src/controllers/authController.js:125:13)
+
+  console.log
+    Auto-created organizer profile: new ObjectId("69751513101119df05e378b6")
+
+      at log (src/controllers/tournamentController.js:130:17)
+
+  console.log
+    🔵 Creating tournament with data: {
+      tournament_name: 'Test Tournament',
+      organizer_id: new ObjectId("69751513101119df05e378b6"),
+      start_date: 2026-01-25T18:53:07.251Z,
+      end_date: 2026-01-26T18:53:07.261Z,
+      registration_deadline: 2026-01-25T06:53:07.261Z,
+      status: 'Open'
+    }
+
+      at log (src/controllers/tournamentController.js:169:13)
+
+  console.log
+    ✅ Tournament created successfully: new ObjectId("69751513101119df05e378b8")
+
+      at log (src/controllers/tournamentController.js:180:13)
+
+  console.log
+    ✅ Verified tournament saved to database: new ObjectId("69751513101119df05e378b8")
+
+      at log (src/controllers/tournamentController.js:191:13)
+
+  console.log
+    ✅ Backend - User created successfully: { userId: new ObjectId("6975151345aa80e58472f3c4"), gender: 'Male' }
+
+      at log (src/controllers/authController.js:135:15)
+
+  console.log
+    🔵 Player registration - Received data: {
+      selected_coach_id: undefined,
+      coach_id: '6975151345aa80e58472f3b5',
+      player_dojo_name: 'Test Dojo',
+      coach_name: undefined,
+      user_id: new ObjectId("6975151345aa80e58472f3c4")
+    }
+
+      at log (src/controllers/authController.js:203:15)
+
+  console.log
+    🔵 Player registration - Validated data: {
+      finalCoachName: 'Test User',
+      finalDojoName: 'Test Dojo',
+      coach_id: new ObjectId("6975151345aa80e58472f3b5"),
+      user_id: new ObjectId("6975151345aa80e58472f3c4")
+    }
+
+      at log (src/controllers/authController.js:300:15)
+
+  console.log
+    ✅ Player created successfully: {
+      player_id: new ObjectId("6975151345aa80e58472f3dc"),
+      user_id: new ObjectId("6975151345aa80e58472f3c4"),
+      coach_name: 'Test User',
+      dojo_name: 'Test Dojo',
+      coach_id: new ObjectId("6975151345aa80e58472f3b5"),
+      coach_id_type: 'object',
+      coach_id_string: '6975151345aa80e58472f3b5'
+    }
+
+      at log (src/controllers/authController.js:400:17)
+
+  console.log
+    Email service is ready
+
+      at log (src/utils/emailService.js:31:15)
+
+  console.log
+    Email service is ready
+
+      at log (src/utils/emailService.js:31:15)
+
+  console.log
+    Email service is ready
+
+      at log (src/utils/emailService.js:31:15)
+
+  console.log
+    Email service is ready
+
+      at log (src/utils/emailService.js:31:15)
+
+  console.log
+    📝 Backend - Creating user with data: {
+      username: 'new_coach',
+      email: 'new_coach@example.com',
+      password_hash: '***hidden***',
+      first_name: 'New',
+      last_name: 'Coach',
+      user_type: 'Coach',
+      hasGender: false,
+      genderValue: undefined
+    }
+
+      at log (src/controllers/authController.js:125:13)
+
+  console.log
+    🔄 Checking if next round should be generated for Preliminary in category 697515145edb8b7af4126e06
+
+      at log (src/controllers/matchController.js:427:13)
+
+  console.log
+    ✅ Backend - User created successfully: { userId: new ObjectId("6975151445aa80e58472f419"), gender: undefined }
+
+      at log (src/controllers/authController.js:135:15)
+
+  console.log
+    📊 Found 1 match(es) in Preliminary round
+
+      at log (src/controllers/matchController.js:459:13)
+
+  console.log
+    📋 Match order: To Update
+
+      at log (src/controllers/matchController.js:460:13)
+
+  console.warn
+    ⚠️ Match To Update (697515145edb8b7af4126e08) is completed but has no winner_id
+
+    [0m [90m 510 |[39m       
+     [90m 511 |[39m       [36mif[39m ([33m![39mcompletedMatch[33m.[39mwinner_id) {
+    [31m[1m>[22m[39m[90m 512 |[39m         console[33m.[39mwarn([32m`⚠️ Match ${completedMatch.match_name} (${completedMatch._id}) is completed but has no winner_id`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 513 |[39m         [36mcontinue[39m[33m;[39m
+     [90m 514 |[39m       }
+     [90m 515 |[39m[0m
+
+      at warn (src/controllers/matchController.js:512:17)
+
+  console.log
+    ⚠️ No winners found for Preliminary round in category 697515145edb8b7af4126e06
+
+      at log (src/controllers/matchController.js:578:15)
+
+  console.log
+    Email service is ready
+
+      at log (src/utils/emailService.js:31:15)
+
+  console.log
+    📝 Backend - Creating user with data: {
+      username: 'testuser',
+      email: 'test@example.com',
+      password_hash: '***hidden***',
+      first_name: 'Test',
+      last_name: 'User',
+      user_type: 'Player',
+      gender: 'Male',
+      hasGender: true,
+      genderValue: 'Male'
+    }
+
+      at log (src/controllers/authController.js:125:13)
+
+  console.log
+    ✅ Backend - User created successfully: { userId: new ObjectId("6975151445aa80e58472f455"), gender: 'Male' }
+
+      at log (src/controllers/authController.js:135:15)
+
+  console.log
+    🔵 Player registration - Received data: {
+      selected_coach_id: undefined,
+      coach_id: '6975151445aa80e58472f452',
+      player_dojo_name: 'Test Dojo',
+      coach_name: undefined,
+      user_id: new ObjectId("6975151445aa80e58472f455")
+    }
+
+      at log (src/controllers/authController.js:203:15)
+
+  console.log
+    🔵 Player registration - Validated data: {
+      finalCoachName: 'Test User',
+      finalDojoName: 'Test Dojo',
+      coach_id: new ObjectId("6975151445aa80e58472f452"),
+      user_id: new ObjectId("6975151445aa80e58472f455")
+    }
+
+      at log (src/controllers/authController.js:300:15)
+
+  console.log
+    ✅ Player created successfully: {
+      player_id: new ObjectId("6975151445aa80e58472f45c"),
+      user_id: new ObjectId("6975151445aa80e58472f455"),
+      coach_name: 'Test User',
+      dojo_name: 'Test Dojo',
+      coach_id: new ObjectId("6975151445aa80e58472f452"),
+      coach_id_type: 'object',
+      coach_id_string: '6975151445aa80e58472f452'
+    }
+
+      at log (src/controllers/authController.js:400:17)
+
+  console.log
+    Auto-created organizer profile: new ObjectId("69751514101119df05e3793a")
+
+      at log (src/controllers/tournamentController.js:130:17)
+
+  console.log
+    🔵 Creating tournament with data: {
+      tournament_name: 'Original Name',
+      organizer_id: new ObjectId("69751514101119df05e3793a"),
+      start_date: 2026-01-25T18:53:08.625Z,
+      end_date: 2026-01-26T18:53:08.625Z,
+      registration_deadline: 2026-01-25T06:53:08.625Z,
+      status: 'Draft'
+    }
+
+      at log (src/controllers/tournamentController.js:169:13)
+
+  console.log
+    ✅ Tournament created successfully: new ObjectId("69751514101119df05e3793c")
+
+      at log (src/controllers/tournamentController.js:180:13)
+
+  console.log
+    ✅ Verified tournament saved to database: new ObjectId("69751514101119df05e3793c")
+
+      at log (src/controllers/tournamentController.js:191:13)
+
+  console.log
+    📝 Backend - Creating user with data: {
+      username: 'testuser',
+      email: 'test@example.com',
+      password_hash: '***hidden***',
+      first_name: 'Test',
+      last_name: 'User',
+      user_type: 'Player',
+      gender: 'Male',
+      hasGender: true,
+      genderValue: 'Male'
+    }
+
+      at log (src/controllers/authController.js:125:13)
+
+  console.log
+    Auto-created organizer profile: new ObjectId("69751514101119df05e37965")
+
+      at log (src/controllers/tournamentController.js:130:17)
+
+  console.log
+    🔵 Creating tournament with data: {
+      tournament_name: 'To Delete',
+      organizer_id: new ObjectId("69751514101119df05e37965"),
+      start_date: 2026-01-25T18:53:08.837Z,
+      end_date: 2026-01-26T18:53:08.837Z,
+      registration_deadline: 2026-01-25T06:53:08.837Z,
+      status: 'Draft'
+    }
+
+      at log (src/controllers/tournamentController.js:169:13)
+
+  console.log
+    ✅ Tournament created successfully: new ObjectId("69751514101119df05e37967")
+
+      at log (src/controllers/tournamentController.js:180:13)
+
+  console.log
+    ✅ Verified tournament saved to database: new ObjectId("69751514101119df05e37967")
+
+      at log (src/controllers/tournamentController.js:191:13)
+
+  console.log
+    ✅ Backend - User created successfully: { userId: new ObjectId("6975151445aa80e58472f47b"), gender: 'Male' }
+
+      at log (src/controllers/authController.js:135:15)
+
+  console.log
+    🔵 Player registration - Received data: {
+      selected_coach_id: undefined,
+      coach_id: '6975151445aa80e58472f478',
+      player_dojo_name: 'Test Dojo',
+      coach_name: undefined,
+      user_id: new ObjectId("6975151445aa80e58472f47b")
+    }
+
+      at log (src/controllers/authController.js:203:15)
+
+  console.log
+    🔵 Player registration - Validated data: {
+      finalCoachName: 'Test User',
+      finalDojoName: 'Test Dojo',
+      coach_id: new ObjectId("6975151445aa80e58472f478"),
+      user_id: new ObjectId("6975151445aa80e58472f47b")
+    }
+
+      at log (src/controllers/authController.js:300:15)
+
+  console.log
+    ✅ Player created successfully: {
+      player_id: new ObjectId("6975151445aa80e58472f482"),
+      user_id: new ObjectId("6975151445aa80e58472f47b"),
+      coach_name: 'Test User',
+      dojo_name: 'Test Dojo',
+      coach_id: new ObjectId("6975151445aa80e58472f478"),
+      coach_id_type: 'object',
+      coach_id_string: '6975151445aa80e58472f478'
+    }
+
+      at log (src/controllers/authController.js:400:17)
+
+  console.log
+    📝 Backend - Creating user with data: {
+      username: 'testuser',
+      email: 'test@example.com',
+      password_hash: '***hidden***',
+      first_name: 'Test',
+      last_name: 'User',
+      user_type: 'Player',
+      gender: 'Male',
+      hasGender: true,
+      genderValue: 'Male'
+    }
+
+      at log (src/controllers/authController.js:125:13)
+
+  console.log
+    ✅ Backend - User created successfully: { userId: new ObjectId("6975151545aa80e58472f4a0"), gender: 'Male' }
+
+      at log (src/controllers/authController.js:135:15)
+
+  console.log
+    🔵 Player registration - Received data: {
+      selected_coach_id: undefined,
+      coach_id: '6975151545aa80e58472f49d',
+      player_dojo_name: 'Test Dojo',
+      coach_name: undefined,
+      user_id: new ObjectId("6975151545aa80e58472f4a0")
+    }
+
+      at log (src/controllers/authController.js:203:15)
+
+  console.log
+    🔵 Player registration - Validated data: {
+      finalCoachName: 'Test User',
+      finalDojoName: 'Test Dojo',
+      coach_id: new ObjectId("6975151545aa80e58472f49d"),
+      user_id: new ObjectId("6975151545aa80e58472f4a0")
+    }
+
+      at log (src/controllers/authController.js:300:15)
+
+  console.log
+    ✅ Player created successfully: {
+      player_id: new ObjectId("6975151545aa80e58472f4a7"),
+      user_id: new ObjectId("6975151545aa80e58472f4a0"),
+      coach_name: 'Test User',
+      dojo_name: 'Test Dojo',
+      coach_id: new ObjectId("6975151545aa80e58472f49d"),
+      coach_id_type: 'object',
+      coach_id_string: '6975151545aa80e58472f49d'
+    }
+
+      at log (src/controllers/authController.js:400:17)
+
+FAIL tests/integration/match.test.js (5.955 s)
+  Match Controller Tests
+    POST /api/matches
+      √ should create a match (1128 ms)
+    GET /api/matches
+      × should get all matches and filter by tournament (153 ms)
+      × should filter matches by status (129 ms)
+    GET /api/matches/:id
+      √ should get a single match (181 ms)
+    PUT /api/matches/:id
+      √ should update a match (241 ms)
+    DELETE /api/matches/:id
+      √ should delete a match (142 ms)
+
+  ● Match Controller Tests › GET /api/matches › should get all matches and filter by tournament
+
+    ValidationError: Match validation failed: scheduled_time: Path `scheduled_time` is required., match_level: Path `match_level` is required.
+
+      at model.Document.invalidate (node_modules/mongoose/lib/document.js:3219:32)
+      at node_modules/mongoose/lib/document.js:3012:17
+      at node_modules/mongoose/lib/schematype.js:1368:9
+
+  ● Match Controller Tests › GET /api/matches › should filter matches by status
+
+    ValidationError: Match validation failed: scheduled_time: Path `scheduled_time` is required., match_level: Path `match_level` is required., match_type: Path `match_type` is required.
+
+      at model.Document.invalidate (node_modules/mongoose/lib/document.js:3219:32)
+      at node_modules/mongoose/lib/document.js:3012:17
+      at node_modules/mongoose/lib/schematype.js:1368:9
+
+PASS tests/integration/tournament.test.js (6.152 s)
+  Tournament Controller Tests
+    POST /api/tournaments
+      √ should create a tournament as organizer (1287 ms)
+      √ should fail to create tournament as regular user (243 ms)
+    GET /api/tournaments
+      √ should get all tournaments (251 ms)
+    GET /api/tournaments/:id
+      √ should get a single tournament (217 ms)
+    PUT /api/tournaments/:id
+      √ should update tournament as owner (224 ms)
+    DELETE /api/tournaments/:id
+      √ should delete tournament as owner (213 ms)
+
+PASS tests/integration/user.test.js (6.299 s)
+  User Controller Integration Tests
+    GET /api/users
+      √ should allow admin to get all users (1188 ms)
+      √ should deny non-admin users (229 ms)
+    GET /api/users/:id
+      √ should get user by id (275 ms)
+      √ should return 404 for non-existent user (206 ms)
+    PUT /api/users/:id
+      √ should allow user to update their own profile (225 ms)
+      √ should deny user updating another user (187 ms)
+    DELETE /api/users/:id
+      √ should allow admin to delete a user (183 ms)
+      √ should deny non-admin from deleting users (174 ms)
+
+PASS tests/integration/auth.test.js (6.587 s)
+  Auth Controller Integration Tests
+    POST /api/auth/register
+      √ should register a new user successfully (1338 ms)
+      √ should fail if user already exists (249 ms)
+      √ should register a Coach successfully (247 ms)
+      √ should fail validation for Coach if dojo data is missing (121 ms)
+    POST /api/auth/login
+      √ should login successfully with correct credentials (304 ms)
+      √ should fail with incorrect password (282 ms)
+      √ should fail with non-existent email (205 ms)
+
+PASS tests/integration/player.test.js (6.938 s)
+  Player Controller Tests
+    POST /api/players
+      √ should create player profile (1249 ms)
+      √ should prevent duplicate profile (395 ms)
+    GET /api/players
+      √ should list players (334 ms)
+    GET /api/players/:id
+      √ should get single player (274 ms)
+    PUT /api/players/:id
+      √ should update own profile (268 ms)
+      √ should fail to update others profile (275 ms)
+    DELETE /api/players/:id
+      √ should allow admin to delete player (277 ms)
+      √ should prevent regular user from deleting (239 ms)
+
+-------------------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File                           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                                                    
+-------------------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files                      |   23.68 |      7.2 |   10.27 |   24.07 |                                                                                                                                                                                                      
+ src                           |   77.92 |     6.66 |      20 |   77.63 |                                                                                                                                                                                                      
+  app.js                       |   77.92 |     6.66 |      20 |   77.63 | 56-62,81-111,118,149                                                                                                                                                                                 
+ src/controllers               |   15.98 |     7.71 |    8.71 |   16.13 |                                                                                                                                                                                                      
+  authController.js            |   32.82 |    31.94 |   18.18 |   34.64 | 52,67,98,102,141-164,195-197,213-214,221-222,235,244,271-273,285-286,293-294,313-314,319-324,331-337,339-352,378,396,410-441,468,481,499,522-532,562,570-608,616-622,630-731,739-768,776-819,827-917 
+  categoryController.js        |   17.02 |        0 |       0 |   17.02 | 8-22,30-46,54-82,90-123,131-160                                                                                                                                                                      
+  chatController.js            |    8.33 |        0 |       0 |    8.82 | 11-38,46-73,81-110,118-150,158-184,192-650                                                                                                                                                           
+  coachController.js           |   18.75 |        0 |       0 |   18.75 | 9-44,52-68,76-105,113-142,150-167                                                                                                                                                                    
+  dojoController.js            |   17.02 |        0 |       0 |   17.02 | 8-19,27-43,51-80,88-118,126-152                                                                                                                                                                      
+  judgeController.js           |    18.6 |        0 |       0 |    18.6 | 8-19,27-43,51-80,88-117,125-142                                                                                                                                                                      
+  kataPerformanceController.js |    5.02 |        0 |       0 |    5.27 | 13-66,74-112,120-262,268-273,281-799,811-822,828-873,880-955,963-1054,1062-1107,1115-1172                                                                                                            
+  kataReportController.js      |    8.33 |        0 |       0 |    8.77 | 11-253,261-281,289-303,311-337                                                                                                                                                                       
+  kumiteReportController.js    |    6.38 |        0 |       0 |    6.74 | 13-422,430-450,458-472,480-509                                                                                                                                                                       
+  matchController.js           |   15.13 |     6.27 |   16.27 |   14.97 | 12-129,144,190,207,219,232-245,259,269,281,297,305-414,438-439,455-456,465-470,484-503,517-573,582-796,805-1163,1171-1213                                                                            
+  notificationController.js    |    14.7 |        0 |       0 |    14.7 | 8-35,43-66,74-86,94-119,127-155,163-174,182-207                                                                                                                                                      
+  organizerController.js       |    18.6 |        0 |       0 |    18.6 | 8-19,27-43,51-80,88-117,125-142                                                                                                                                                                      
+  paymentController.js         |   12.82 |        0 |       0 |   13.33 | 9-32,42-57,67-86,96-119,365-381,391-406,416-431,441-479                                                                                                                                              
+  playerController.js          |    61.9 |       24 |     100 |    61.9 | 21,35,46,57,83,95,108-131,156,168,181                                                                                                                                                                
+  registrationController.js    |    2.26 |        0 |       0 |     2.3 | 11-120,128-159,167-1306,1319-1441,1449-1660                                                                                                                                                          
+  scoreController.js           |    9.48 |        0 |       0 |    9.64 | 11-30,38-56,64-230,238-286,294-322                                                                                                                                                                   
+  tatamiController.js          |       8 |        0 |       0 |    8.18 | 13-40,48-145,153-248,256-301,309-377,385-477,485-548,556-628,636-685,693-755                                                                                                                         
+  teamController.js            |   21.05 |        0 |       0 |   21.05 | 8-20,28-52,60-69,77-98,106-126                                                                                                                                                                       
+  tournamentController.js      |   75.22 |    50.74 |     100 |   73.26 | 14,17,22-24,45,65,76,116,132-137,156,185-186,210-217,229,238,247,261,273,282,295                                                                                                                     
+  userController.js            |   72.09 |       60 |     100 |   72.09 | 17,40,52,69-72,86,98,106,114,122,132                                                                                                                                                                 
+ src/middlewares               |   50.68 |       28 |   71.42 |   51.38 |                                                                                                                                                                                                      
+  authMiddleware.js            |   77.77 |       70 |     100 |   77.77 | 14,28,37-43                                                                                                                                                                                          
+  errorHandler.js              |    8.33 |        0 |       0 |    8.69 | 2-41                                                                                                                                                                                                 
+  optionalAuth.js              |      50 |       30 |     100 |      50 | 11,19-37                                                                                                                                                                                             
+  roleMiddleware.js            |    87.5 |       75 |     100 |    87.5 | 4                                                                                                                                                                                                    
+  validateRequest.js           |   85.71 |       50 |     100 |   85.71 | 7                                                                                                                                                                                                    
+ src/models                    |      72 |     4.16 |   22.22 |   74.38 |                                                                                                                                                                                                      
+  ChatMessage.js               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Coach.js                     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Dojo.js                      |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Judge.js                     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  KataPerformance.js           |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  KataReport.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  KumiteReport.js              |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Match.js                     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  MatchJudge.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  MatchParticipant.js          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Notification.js              |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Organizer.js                 |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Payment.js                   |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Player.js                    |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Registration.js              |   20.93 |        0 |       0 |   23.07 | 107-182                                                                                                                                                                                              
+  Score.js                     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Tatami.js                    |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Team.js                      |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  TeamMember.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  Tournament.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  TournamentCategory.js        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  User.js                      |   91.66 |       50 |     100 |   91.66 | 86                                                                                                                                                                                                   
+ src/routes                    |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  authRoutes.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  categoryRoutes.js            |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  chatRoutes.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  coachRoutes.js               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  dojoRoutes.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  judgeRoutes.js               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  kataPerformanceRoutes.js     |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  kataReportRoutes.js          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  kumiteReportRoutes.js        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  matchRoutes.js               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  notificationRoutes.js        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  organizerRoutes.js           |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  paymentRoutes.js             |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  playerRoutes.js              |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  registrationRoutes.js        |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  scoreRoutes.js               |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  tatamiRoutes.js              |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  teamRoutes.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  tournamentRoutes.js          |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+  userRoutes.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+ src/services                  |    7.79 |        0 |       0 |    8.05 |                                                                                                                                                                                                      
+  drawGenerationService.js     |    7.18 |        0 |       0 |    7.78 | 19-328,336-489                                                                                                                                                                                       
+  paymentService.js            |    8.23 |        0 |       0 |    8.23 | 21-22,37-40,56-362,376-636,649-663,673-687,697-708,722-739,752-761,774-788,797,802-822                                                                                                               
+ src/utils                     |   21.96 |    11.86 |   11.11 |   22.05 |                                                                                                                                                                                                      
+  emailService.js              |   35.55 |    36.84 |      25 |   35.55 | 28-29,35,39-66,74-83,87-89,93-95,99-101,105-147                                                                                                                                                      
+  geminiService.js             |    5.76 |        0 |       0 |    5.76 | 7-20,29-214,224-251                                                                                                                                                                                  
+  generateToken.js             |    87.5 |       50 |     100 |    87.5 | 20                                                                                                                                                                                                   
+  imageHandler.js              |   46.15 |    21.42 |       0 |      48 | 8,14-18,25-28,46-49,56-57                                                                                                                                                                            
+  payhere.js                   |   23.25 |       12 |       0 |   23.25 | 18-21,34-45,70-82,92,128-188,202-203                                                                                                                                                                 
+  socket.js                    |   18.42 |        0 |       0 |   18.42 | 6-60,64-67,72-74,79-81,86-87                                                                                                                                                                         
+ src/validations               |   32.72 |     3.22 |      25 |   32.72 |                                                                                                                                                                                                      
+  registrationValidation.js    |   11.11 |        0 |       0 |   11.11 | 16-86                                                                                                                                                                                                
+  tournamentValidation.js      |   64.28 |       25 |   66.66 |   64.28 | 18,35,119-122                                                                                                                                                                                        
+  userValidation.js            |     100 |      100 |     100 |     100 |                                                                                                                                                                                                      
+-------------------------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Test Suites: 1 failed, 4 passed, 5 total
+Tests:       2 failed, 33 passed, 35 total
+Snapshots:   0 total
+Time:        8.146 s, estimated 9 s
+Ran all test suites matching tests/integration.

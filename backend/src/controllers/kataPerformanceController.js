@@ -11,12 +11,14 @@ const Judge = require('../models/Judge');
 // @access  Private
 const getKataPerformances = async (req, res, next) => {
   try {
-    const { category_id, round, tournament_id } = req.query;
+    const { category_id, round, tournament_id, player_id, status } = req.query;
     const query = {};
 
     if (category_id) query.category_id = category_id;
     if (round) query.round = round;
     if (tournament_id) query.tournament_id = tournament_id;
+    if (player_id) query.player_id = player_id;
+    if (status) query.status = status;
 
     const performances = await KataPerformance.find(query)
       .populate('tournament_id', 'tournament_name')

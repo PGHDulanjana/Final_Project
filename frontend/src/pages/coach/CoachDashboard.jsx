@@ -843,13 +843,13 @@ const CoachDashboard = () => {
       setCategories(allCategories);
 
       // Load Kata performances for Kata events
-      const kataCategories = allCategories.filter(c => 
+      const kataCategories = allCategories.filter(c =>
         c.category_type === 'Kata' || c.category_type === 'Team Kata'
       );
-      
+
       if (kataCategories.length > 0) {
         try {
-          const kataPromises = kataCategories.map(c => 
+          const kataPromises = kataCategories.map(c =>
             kataPerformanceService.getPerformances({ category_id: c._id })
               .catch((err) => {
                 console.error(`Error loading performances for category ${c._id}:`, err);
@@ -877,7 +877,9 @@ const CoachDashboard = () => {
       }
     } catch (error) {
       console.error("Error loading dashboard data:", error);
-      toast.error("Failed to load dashboard data");
+      if (error.response?.status !== 401) {
+        toast.error("Failed to load dashboard data");
+      }
     } finally {
       setLoading(false);
     }
@@ -948,8 +950,7 @@ const CoachDashboard = () => {
     if (existingRegistration) {
       const player = players.find((p) => p._id === registrationForm.player_id);
       const playerName = player?.user_id
-        ? `${player.user_id.first_name || ""} ${
-            player.user_id.last_name || ""
+        ? `${player.user_id.first_name || ""} ${player.user_id.last_name || ""
           }`.trim() || player.user_id.username
         : "This player";
 
@@ -1026,8 +1027,7 @@ const CoachDashboard = () => {
             (p) => p._id === registrationForm.player_id
           );
           const playerName = player?.user_id
-            ? `${player.user_id.first_name || ""} ${
-                player.user_id.last_name || ""
+            ? `${player.user_id.first_name || ""} ${player.user_id.last_name || ""
               }`.trim() || player.user_id.username
             : "This player";
 
@@ -1209,18 +1209,16 @@ const CoachDashboard = () => {
                   { id: "tournaments", label: "Tournaments", icon: FiAward },
                   { id: "kata-player-lists", label: "Kata Player Lists", icon: FiTarget },
                   { id: "kumite-match-draws", label: "Kumite Match Draws", icon: FiTarget },
-                  { id: "notifications", label: "Notifications", icon: FiBell },
                 ].map((tab) => {
                   const Icon = tab.icon;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${
-                        activeTab === tab.id
+                      className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${activeTab === tab.id
                           ? "border-b-2 border-blue-600 text-blue-600"
                           : "text-gray-600 hover:text-gray-800"
-                      }`}
+                        }`}
                     >
                       <Icon className="w-4 h-4" />
                       {tab.label}
@@ -1421,10 +1419,10 @@ const CoachDashboard = () => {
                       const displayPlayers =
                         dojoNames.length > 1
                           ? dojoNames
-                              .slice(0, 2)
-                              .flatMap((dojoName) =>
-                                playersByDojo[dojoName].slice(0, 3)
-                              )
+                            .slice(0, 2)
+                            .flatMap((dojoName) =>
+                              playersByDojo[dojoName].slice(0, 3)
+                            )
                           : players.slice(0, 6);
 
                       return (
@@ -1660,9 +1658,9 @@ const CoachDashboard = () => {
                                   description: dojo.description || "",
                                   established_date: dojo.established_date
                                     ? format(
-                                        new Date(dojo.established_date),
-                                        "yyyy-MM-dd"
-                                      )
+                                      new Date(dojo.established_date),
+                                      "yyyy-MM-dd"
+                                    )
                                     : "",
                                 });
                                 setShowDojoModal(true);
@@ -1690,7 +1688,7 @@ const CoachDashboard = () => {
                                     );
                                     toast.error(
                                       error.response?.data?.message ||
-                                        "Failed to delete dojo"
+                                      "Failed to delete dojo"
                                     );
                                   }
                                 }
@@ -1861,14 +1859,14 @@ const CoachDashboard = () => {
                         selectedDojoFilter === "all"
                           ? players
                           : players.filter((p) => {
-                              const playerDojoName = (p.dojo_name || "")
-                                .toLowerCase()
-                                .trim();
-                              return (
-                                playerDojoName ===
-                                selectedDojoFilter.toLowerCase().trim()
-                              );
-                            });
+                            const playerDojoName = (p.dojo_name || "")
+                              .toLowerCase()
+                              .trim();
+                            return (
+                              playerDojoName ===
+                              selectedDojoFilter.toLowerCase().trim()
+                            );
+                          });
 
                       // Group players by dojo
                       const playersByDojo = {};
@@ -1931,18 +1929,18 @@ const CoachDashboard = () => {
                 const regPlayerId = r.player_id?._id || r.player_id;
                 const isCoachPlayer = players.some(p => p._id === regPlayerId);
                 return isCoachPlayer &&
-                       r.registration_type === 'Individual' &&
-                       r.approval_status === 'Approved' &&
-                       r.payment_status === 'Paid';
+                  r.registration_type === 'Individual' &&
+                  r.approval_status === 'Approved' &&
+                  r.payment_status === 'Paid';
               });
 
               const kataEventIds = coachPlayerRegistrations
                 .map(r => r.category_id?._id || r.category_id)
                 .filter(Boolean);
 
-              const kataCategories = categories.filter(c => 
+              const kataCategories = categories.filter(c =>
                 (c.category_type === 'Kata' || c.category_type === 'Team Kata') &&
-                kataEventIds.some(eventId => 
+                kataEventIds.some(eventId =>
                   c._id?.toString() === eventId?.toString() || c._id === eventId
                 )
               );
@@ -2075,43 +2073,40 @@ const CoachDashboard = () => {
                                           {roundPerformances.length} Player{roundPerformances.length !== 1 ? 's' : ''}
                                         </span>
                                       </div>
-                                      
+
                                       <div className="space-y-2">
                                         {sortedPerformances.map((performance, index) => {
                                           const playerName = performance.player_id?.user_id
                                             ? `${performance.player_id.user_id.first_name || ''} ${performance.player_id.user_id.last_name || ''}`.trim() || performance.player_id.user_id.username
                                             : 'Player';
-                                          const isCoachPlayer = players.some(p => 
+                                          const isCoachPlayer = players.some(p =>
                                             p._id?.toString() === performance.player_id?._id?.toString() ||
                                             p._id === performance.player_id?._id
                                           );
                                           const scoresCount = performance.scores?.length || 0;
-                                          
+
                                           return (
                                             <div
                                               key={performance._id}
-                                              className={`rounded-lg p-4 border-2 transition ${
-                                                isCoachPlayer
+                                              className={`rounded-lg p-4 border-2 transition ${isCoachPlayer
                                                   ? 'bg-blue-50 border-blue-400 shadow-md'
                                                   : 'bg-gray-50 border-gray-200'
-                                              }`}
+                                                }`}
                                             >
                                               <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-4 flex-1">
-                                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                                                    isCoachPlayer
+                                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${isCoachPlayer
                                                       ? 'bg-blue-600 text-white'
                                                       : 'bg-gray-200 text-gray-700'
-                                                  }`}>
+                                                    }`}>
                                                     {round === 'Third Round (Final 4)' && performance.place
                                                       ? performance.place
                                                       : index + 1}
                                                   </div>
                                                   <div className="flex-1">
                                                     <div className="flex items-center gap-2">
-                                                      <p className={`font-semibold ${
-                                                        isCoachPlayer ? 'text-blue-800' : 'text-gray-800'
-                                                      }`}>
+                                                      <p className={`font-semibold ${isCoachPlayer ? 'text-blue-800' : 'text-gray-800'
+                                                        }`}>
                                                         {playerName}
                                                         {isCoachPlayer && (
                                                           <span className="ml-2 text-xs text-blue-600">(Your Player)</span>
@@ -2169,18 +2164,18 @@ const CoachDashboard = () => {
                 const regPlayerId = r.player_id?._id || r.player_id;
                 const isCoachPlayer = players.some(p => p._id === regPlayerId);
                 return isCoachPlayer &&
-                       r.registration_type === 'Individual' &&
-                       r.approval_status === 'Approved' &&
-                       r.payment_status === 'Paid';
+                  r.registration_type === 'Individual' &&
+                  r.approval_status === 'Approved' &&
+                  r.payment_status === 'Paid';
               });
 
               const kumiteEventIds = coachPlayerRegistrations
                 .map(r => r.category_id?._id || r.category_id)
                 .filter(Boolean);
 
-              const kumiteCategories = categories.filter(c => 
+              const kumiteCategories = categories.filter(c =>
                 (c.category_type === 'Kumite' || c.category_type === 'Team Kumite') &&
-                kumiteEventIds.some(eventId => 
+                kumiteEventIds.some(eventId =>
                   c._id?.toString() === eventId?.toString() || c._id === eventId
                 )
               );
@@ -2250,14 +2245,14 @@ const CoachDashboard = () => {
                                 {category.participation_type} • {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
                               </p>
                             </div>
-                            
+
                             {categoryMatches.length === 0 ? (
                               <div className="text-center py-8 bg-white rounded-lg">
                                 <p className="text-gray-600">No match draws yet. The organizer will create match draws for this event.</p>
                               </div>
                             ) : (
-                              <MatchDrawsBracket 
-                                matches={categoryMatches} 
+                              <MatchDrawsBracket
+                                matches={categoryMatches}
                                 category={category}
                               />
                             )}
@@ -2381,7 +2376,7 @@ const CoachDashboard = () => {
                                   return (
                                     regTournamentId === tournament._id ||
                                     regTournamentId?.toString() ===
-                                      tournament._id?.toString()
+                                    tournament._id?.toString()
                                   );
                                 });
 
@@ -2427,7 +2422,7 @@ const CoachDashboard = () => {
                                       );
                                       toast.error(
                                         error.response?.data?.message ||
-                                          "Failed to leave tournament"
+                                        "Failed to leave tournament"
                                       );
                                     }
                                   }}
@@ -2529,9 +2524,8 @@ const CoachDashboard = () => {
                                               if (typeof e === "string")
                                                 return e;
                                               if (e.message)
-                                                return `${
-                                                  e.field || "Field"
-                                                }: ${e.message}`;
+                                                return `${e.field || "Field"
+                                                  }: ${e.message}`;
                                               return JSON.stringify(e);
                                             })
                                             .join(", ");
@@ -2599,9 +2593,9 @@ const CoachDashboard = () => {
                                         await registrationService.registerForTournament(
                                           registrationData
                                         );
-                                      
+
                                       console.log('✅ Coach registration: Success response:', response);
-                                      
+
                                       toast.success(
                                         "Successfully registered for tournament! Registration is free."
                                       );
@@ -2699,9 +2693,8 @@ const CoachDashboard = () => {
                                               if (typeof e === "string")
                                                 return e;
                                               if (e.message)
-                                                return `${
-                                                  e.field || "Field"
-                                                }: ${e.message}`;
+                                                return `${e.field || "Field"
+                                                  }: ${e.message}`;
                                               return JSON.stringify(e);
                                             })
                                             .join(", ");
@@ -2760,7 +2753,7 @@ const CoachDashboard = () => {
                           return (
                             regTournamentId === tournament._id ||
                             regTournamentId?.toString() ===
-                              tournament._id?.toString()
+                            tournament._id?.toString()
                           );
                         }
                       );
@@ -2770,7 +2763,7 @@ const CoachDashboard = () => {
                         return (
                           matchTournamentId === tournament._id ||
                           matchTournamentId?.toString() ===
-                            tournament._id?.toString()
+                          tournament._id?.toString()
                         );
                       });
 
@@ -3219,7 +3212,7 @@ const CoachDashboard = () => {
                 console.error("Error registering player:", error);
                 toast.error(
                   error.response?.data?.message ||
-                    "Failed to register player for event"
+                  "Failed to register player for event"
                 );
               }
             }}
@@ -3261,9 +3254,8 @@ const CoachDashboard = () => {
                   const success = submitPayHereFormLocal(
                     paymentRes.data.payhere,
                     {
-                      items: `Event Payment - ${
-                        category?.category_name || "Tournament Event"
-                      }`,
+                      items: `Event Payment - ${category?.category_name || "Tournament Event"
+                        }`,
                       customerInfo,
                     }
                   );
@@ -3318,9 +3310,8 @@ const PlayerCard = ({
 
   return (
     <div
-      className={`border rounded-xl p-4 hover:shadow-lg transition cursor-pointer ${
-        hasPendingPayment ? "border-yellow-300 bg-yellow-50" : "border-gray-200"
-      }`}
+      className={`border rounded-xl p-4 hover:shadow-lg transition cursor-pointer ${hasPendingPayment ? "border-yellow-300 bg-yellow-50" : "border-gray-200"
+        }`}
       onClick={onClick}
     >
       <div className="flex items-center justify-between mb-3">
@@ -3366,11 +3357,10 @@ const PlayerCard = ({
           <p>
             <span className="font-medium">Gender:</span>{" "}
             <span
-              className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                player.gender === "Male"
+              className={`px-2 py-0.5 rounded text-xs font-semibold ${player.gender === "Male"
                   ? "bg-blue-100 text-blue-700"
                   : "bg-pink-100 text-pink-700"
-              }`}
+                }`}
             >
               {player.gender === "Male" ? "♂️ Male" : "♀️ Female"}
             </span>
@@ -3392,34 +3382,34 @@ const PlayerCard = ({
           player.kumite ||
           player.team_kata ||
           player.team_kumite) && (
-          <div className="mt-2 pt-2 border-t border-gray-200">
-            <p className="text-xs font-medium text-gray-500 mb-1">
-              Event Types:
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {player.kata && (
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                  Kata
-                </span>
-              )}
-              {player.kumite && (
-                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
-                  Kumite
-                </span>
-              )}
-              {player.team_kata && (
-                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                  Team Kata
-                </span>
-              )}
-              {player.team_kumite && (
-                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
-                  Team Kumite
-                </span>
-              )}
+            <div className="mt-2 pt-2 border-t border-gray-200">
+              <p className="text-xs font-medium text-gray-500 mb-1">
+                Event Types:
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {player.kata && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                    Kata
+                  </span>
+                )}
+                {player.kumite && (
+                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                    Kumite
+                  </span>
+                )}
+                {player.team_kata && (
+                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                    Team Kata
+                  </span>
+                )}
+                {player.team_kumite && (
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                    Team Kumite
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
         {!player.age && !player.belt_rank && (
           <p className="text-yellow-600 text-xs font-medium mt-2">
             Click to add details
@@ -3468,24 +3458,22 @@ const RegistrationCard = ({
           </p>
           <div className="flex items-center gap-4 mt-2">
             <span
-              className={`px-2 py-1 rounded text-xs font-medium ${
-                registration.approval_status === "Approved"
+              className={`px-2 py-1 rounded text-xs font-medium ${registration.approval_status === "Approved"
                   ? "bg-green-100 text-green-700"
                   : registration.approval_status === "Pending"
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-red-100 text-red-700"
-              }`}
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-red-100 text-red-700"
+                }`}
             >
               {registration.approval_status}
             </span>
             <span
-              className={`px-2 py-1 rounded text-xs font-medium ${
-                registration.payment_status === "Paid"
+              className={`px-2 py-1 rounded text-xs font-medium ${registration.payment_status === "Paid"
                   ? "bg-green-100 text-green-700"
                   : registration.payment_status === "Pending"
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-red-100 text-red-700"
-              }`}
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-red-100 text-red-700"
+                }`}
             >
               Payment: {registration.payment_status}
             </span>
@@ -3569,13 +3557,12 @@ const TournamentCard = ({
         </p>
         <div className="flex items-center gap-2 mb-2">
           <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              tournament.status === "Open"
+            className={`px-3 py-1 rounded-full text-xs font-semibold ${tournament.status === "Open"
                 ? "bg-green-100 text-green-700"
                 : tournament.status === "Ongoing"
-                ? "bg-blue-100 text-blue-700"
-                : "bg-gray-100 text-gray-700"
-            }`}
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-gray-100 text-gray-700"
+              }`}
           >
             {tournament.status}
           </span>
@@ -3684,13 +3671,12 @@ const MatchCard = ({ match, tournaments }) => {
           </div>
         </div>
         <span
-          className={`px-3 py-1 rounded-full text-xs font-semibold ${
-            match.status === "In Progress"
+          className={`px-3 py-1 rounded-full text-xs font-semibold ${match.status === "In Progress"
               ? "bg-blue-100 text-blue-700"
               : match.status === "Scheduled"
-              ? "bg-yellow-100 text-yellow-700"
-              : "bg-gray-100 text-gray-700"
-          }`}
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-gray-100 text-gray-700"
+            }`}
         >
           {match.status}
         </span>
@@ -3850,15 +3836,12 @@ const RegisterPlayerModal = ({
                 <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm font-semibold text-blue-900">
                     {selectedCategory.participation_type === "Individual"
-                      ? `Individual Player Fee: Rs ${
-                          selectedCategory.individual_player_fee?.toFixed(2) ||
-                          "0.00"
-                        }`
-                      : `Team Event Fee (${
-                          selectedCategory.team_size || 3
-                        } members): Rs ${
-                          selectedCategory.team_event_fee?.toFixed(2) || "0.00"
-                        }`}
+                      ? `Individual Player Fee: Rs ${selectedCategory.individual_player_fee?.toFixed(2) ||
+                      "0.00"
+                      }`
+                      : `Team Event Fee (${selectedCategory.team_size || 3
+                      } members): Rs ${selectedCategory.team_event_fee?.toFixed(2) || "0.00"
+                      }`}
                   </p>
                   <p className="text-xs text-blue-700 mt-1">
                     Registering for this event. Matches will be created after

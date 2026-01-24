@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { matchService } from '../../services/matchService';
 import { scoreService } from '../../services/scoreService';
+import kataPerformanceService from '../../services/kataPerformanceService';
+import { playerService } from '../../services/playerService';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
 import Layout from '../../components/Layout';
@@ -20,19 +22,53 @@ const PlayerResults = () => {
 
   const loadData = async () => {
     try {
-      // Get completed matches
-      const matchesRes = await matchService.getMatches({ status: 'Completed' });
+      setLoading(true);
+
+      // 1. First get the Player Profile ID 
+      // Check if player_id is already in user object
+      let playerId = null;
+      if (user.player_id) {
+        playerId = user.player_id._id || user.player_id;
+      } else {
+        // Fallback fetch
+        try {
+          const playersRes = await playerService.getPlayers();
+          const allPlayers = playersRes.data || [];
+          const profile = allPlayers.find(p => {
+            const pUserId = p.user_id?._id || p.user_id;
+            return String(pUserId) === String(user._id);
+          });
+          if (profile) playerId = profile._id;
+        } catch (e) { console.error(e); }
+      }
+
+      // Get matches (Removed strict status filter to show ongoing)
+      const matchesRes = await matchService.getMatches({});
       const completedMatches = matchesRes.data || [];
 
       // Get all scores
       const scoresRes = await scoreService.getScores();
       const allScores = scoresRes.data || [];
 
+      // Get Kata performances
+      let kataPerformances = [];
+      if (playerId) {
+        try {
+          const kataRes = await kataPerformanceService.getPerformances({
+            player_id: playerId
+          });
+          // Ensure we only process those with a final score
+          kataPerformances = (kataRes.data || []).filter(p => p.final_score !== null && p.final_score !== undefined);
+        } catch (err) {
+          console.error("Error fetching Kata performances", err);
+        }
+      }
+
       setMatches(completedMatches);
       setScores(allScores);
 
       // Process results from matches and scores
-      const processedResults = processResults(completedMatches, allScores);
+      const processedResults = processResults(completedMatches, allScores, kataPerformances, playerId);
       setResults(processedResults);
     } catch (error) {
       console.error('Error loading results:', error);
@@ -41,71 +77,144 @@ const PlayerResults = () => {
     }
   };
 
-  const processResults = (matches, allScores) => {
-    const resultsList = [];
+  const processResults = (matches, allScores, kataPerformances, playerId) => {
+    if (!user) return [];
 
+    const resultsList = [];
+    const userId = user._id;
+
+    // --- Process KUMITE Matches ---
     matches.forEach((match) => {
-      // Get scores for this match
+      // 1. Find if the current user participated in this match
+      // Check both individual (player_id -> user_id) and team (team_id -> members -> player_id -> user_id)
+      let myParticipantId = null;
+      let myParticipant = null;
+
+      const myParticipation = match.participants?.find(p => {
+        // Individual check
+        if (p.player_id && (p.player_id.user_id?._id === userId || p.player_id.user_id === userId)) {
+          return true;
+        }
+        // Team check (if populated)
+        if (p.team_id) {
+          // 1. Check members
+          if (p.team_id.members && Array.isArray(p.team_id.members)) {
+            const inMembers = p.team_id.members.some(member =>
+              (member.player_id?.user_id?._id === userId || member.player_id?.user_id === userId || member.player_id === userId)
+            );
+            if (inMembers) return true;
+          }
+          // 2. Fallback Team ID check
+          // We might not have playerProfile here easily unless we passed it, but let's assume Members check is sufficient for Results page usually, 
+          // or we rely on the fact we are looking for *my* matches.
+        }
+        return false;
+      });
+
+      if (!myParticipation) return; // Skip
+
+      // Identified the user's participation record
+      myParticipantId = myParticipation._id;
+      myParticipant = myParticipation;
+
+      // 2. Get all scores for this match to determine ranking
       const matchScores = allScores.filter(
         score => score.match_id?._id === match._id || score.match_id === match._id
       );
 
+      // Check for explicit result or score existence
+      const matchWinnerIdStr = match.winner_id?._id?.toString() || match.winner_id?.toString();
+      let isWin = false;
+      let explicitResult = 'Participated'; // Default
+
+      if (matchWinnerIdStr) {
+        const myPlayerId = myParticipant.player_id?._id?.toString() || myParticipant.player_id?.toString();
+        const myTeamId = myParticipant.team_id?._id?.toString() || myParticipant.team_id?.toString();
+
+        if ((myPlayerId && matchWinnerIdStr === myPlayerId) || (myTeamId && matchWinnerIdStr === myTeamId)) {
+          isWin = true;
+        }
+      }
+      if (myParticipant.result === 'Win') isWin = true;
+
+      // If match is not completed and no winner, but I have scores, show as Pending/Participated?
+      // Or just 'Completed' if it has scores? 
+      // Let's use scores to determine if we should show it at all? 
+      // The user wants to see "Round progression".
+
+      if (isWin) explicitResult = 'Win';
+      else if (match.winner_id) explicitResult = 'Loss';
+
+      // ... (Score calculation logic same as before) ...
+      let avgScore = 0;
       if (matchScores.length > 0) {
-        // Group scores by participant
-        const participantScores = {};
-        matchScores.forEach(score => {
-          const participantId = score.participant_id?._id || score.participant_id;
-          if (!participantScores[participantId]) {
-            participantScores[participantId] = [];
-          }
-          participantScores[participantId].push(score);
-        });
+        // ...
+        const myScores = matchScores.filter(s => s.participant_id?._id === myParticipantId || s.participant_id === myParticipantId);
+        if (myScores.length > 0) {
+          // ... sum ...
+          const total = myScores.reduce((sum, s) => sum + (s.final_score || 0), 0);
+          avgScore = total / myScores.length;
+        }
+      }
 
-        // Calculate average scores per participant
-        Object.keys(participantScores).forEach(participantId => {
-          const scores = participantScores[participantId];
-          const avgTechnical = scores.reduce((sum, s) => sum + (s.technical_score || 0), 0) / scores.length;
-          const avgPerformance = scores.reduce((sum, s) => sum + (s.performance_score || 0), 0) / scores.length;
-          const avgFinal = scores.reduce((sum, s) => sum + (s.final_score || 0), 0) / scores.length;
-
-          // Determine if this is a win (highest final score wins)
-          const allFinalScores = Object.values(participantScores).map(ps => 
-            ps.reduce((sum, s) => sum + (s.final_score || 0), 0) / ps.length
-          );
-          const maxScore = Math.max(...allFinalScores);
-          const isWin = avgFinal === maxScore && scores.length > 0;
-
-          // Determine placement based on final score ranking
-          const sortedScores = allFinalScores.sort((a, b) => b - a);
-          const rank = sortedScores.indexOf(avgFinal) + 1;
-          const placement = rank === 1 ? '1st Place' : rank === 2 ? '2nd Place' : rank === 3 ? '3rd Place' : `${rank}th Place`;
-
-          // Calculate points (simplified: 100 for 1st, 75 for 2nd, 50 for 3rd, 25 for others)
-          const points = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 50 : 25;
-
-          resultsList.push({
-            id: `${match._id}-${participantId}`,
-            tournament: match.tournament_id?.tournament_name || 'Tournament',
-            category: match.category_id?.category_name || match.match_type || 'Category',
-            date: format(new Date(match.completed_at || match.scheduled_time), 'yyyy-MM-dd'),
-            opponent: 'Opponent', // This would need match participant data
-            result: isWin ? 'Win' : 'Loss',
-            score: `${avgFinal.toFixed(1)}`,
-            placement: placement,
-            points: points,
-            round: match.match_level || 'Final',
-            matchType: match.match_type,
-            finalScore: avgFinal,
-          });
+      // Only add to list if we have a score OR a result OR match is completed
+      if (avgScore > 0 || explicitResult !== 'Participated' || match.status === 'Completed') {
+        resultsList.push({
+          id: `${match._id}-${myParticipantId}`,
+          tournament: match.tournament_id?.tournament_name || 'Tournament',
+          category: match.category_id?.category_name || match.match_type || 'Category',
+          date: format(new Date(match.completed_at || match.scheduled_time), 'yyyy-MM-dd'),
+          result: explicitResult,
+          score: avgScore.toFixed(1),
+          placement: isWin ? '1st Place' : '2nd Place', // simplified
+          points: isWin ? 100 : 50,
+          round: match.match_level || 'Final',
+          matchType: match.match_type,
+          finalScore: avgScore,
         });
       }
     });
+
+    // --- Process KATA Performances ---
+    if (kataPerformances && kataPerformances.length > 0) {
+      kataPerformances.forEach(perf => {
+        const round = perf.round || 'First Round';
+        let explicitResult = 'Participated';
+        let points = 25;
+        let placement = 'Participant';
+
+        if (perf.place) {
+          placement = perf.place === 1 ? '1st Place' : perf.place === 2 ? '2nd Place' : perf.place === 3 ? '3rd Place' : `${perf.place}th Place`;
+          if (perf.place === 1) { explicitResult = 'Win'; points = 100; }
+          else if (perf.place === 2) { explicitResult = 'Runner Up'; points = 75; }
+          else if (perf.place === 3) { explicitResult = '3rd Place'; points = 50; }
+        }
+
+        if (round === 'Third Round (Final 4)' && perf.place && perf.place <= 3) {
+          explicitResult = 'Win';
+        }
+
+        resultsList.push({
+          id: `kata-${perf._id}`,
+          tournament: perf.category_id?.tournament_id?.tournament_name || 'Tournament',
+          category: perf.category_id?.category_name || 'Kata',
+          date: format(new Date(perf.completed_at || perf.createdAt), 'yyyy-MM-dd'),
+          result: explicitResult,
+          score: (perf.final_score || 0).toFixed(2),
+          placement: placement,
+          points: points,
+          round: round,
+          matchType: 'Kata',
+          finalScore: perf.final_score
+        });
+      });
+    }
 
     return resultsList.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
   const filteredResults = results.filter(result => {
-    const matchesCategory = filterCategory === 'all' || 
+    const matchesCategory = filterCategory === 'all' ||
       result.category.toLowerCase().includes(filterCategory.toLowerCase()) ||
       result.matchType?.toLowerCase().includes(filterCategory.toLowerCase());
     const matchesYear = filterYear === 'all' || result.date.startsWith(filterYear);
@@ -281,18 +390,16 @@ const PlayerResults = () => {
                       </td>
                       <td className="px-6 py-4 text-gray-700">{result.date}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          result.result === 'Win' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${result.result === 'Win' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
                           {result.result} ({result.score})
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          result.placement === '1st Place' ? 'bg-yellow-100 text-yellow-700' :
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${result.placement === '1st Place' ? 'bg-yellow-100 text-yellow-700' :
                           result.placement === '2nd Place' ? 'bg-gray-200 text-gray-700' :
-                          'bg-amber-100 text-amber-700'
-                        }`}>
+                            'bg-amber-100 text-amber-700'
+                          }`}>
                           {result.placement}
                         </span>
                       </td>
@@ -306,7 +413,7 @@ const PlayerResults = () => {
                 </tbody>
               </table>
             </div>
-            
+
             {filteredResults.length === 0 && (
               <div className="p-12 text-center">
                 <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,7 +463,7 @@ const PlayerResults = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Placement Distribution</h3>
                   <div className="space-y-4">

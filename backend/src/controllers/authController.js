@@ -3,6 +3,8 @@ const User = require('../models/User');
 const Coach = require('../models/Coach');
 const Player = require('../models/Player');
 const Dojo = require('../models/Dojo');
+const Organizer = require('../models/Organizer');
+const Judge = require('../models/Judge');
 const { generateToken } = require('../utils/generateToken');
 const { sendPasswordResetOTP } = require('../utils/emailService');
 
@@ -11,15 +13,15 @@ const { sendPasswordResetOTP } = require('../utils/emailService');
 // @access  Public
 const register = async (req, res, next) => {
   try {
-    const { 
-      username, 
-      email, 
-      password_hash, 
-      first_name, 
-      last_name, 
-      user_type, 
-      phone, 
-      date_of_birth, 
+    const {
+      username,
+      email,
+      password_hash,
+      first_name,
+      last_name,
+      user_type,
+      phone,
+      date_of_birth,
       gender: genderRaw,
       // Player-specific fields
       selected_coach_id,
@@ -90,23 +92,23 @@ const register = async (req, res, next) => {
       last_name: last_name.trim(),
       user_type: user_type || 'Player',
     };
-    
+
     // Only include optional fields if they have valid values
     if (phone && phone.trim() !== '') {
       userData.phone = phone.trim();
     }
-    
+
     if (date_of_birth) {
       userData.date_of_birth = date_of_birth;
     }
-    
+
     // Handle gender: Convert null/undefined/empty to undefined to prevent Mongoose enum validation errors
     // CRITICAL: If gender is null, undefined, or empty string, we must NOT include it in userData
     let gender = genderRaw;
     if (gender === null || gender === undefined || gender === '') {
       gender = undefined; // Explicitly set to undefined so it's not included
     }
-    
+
     // Only include gender if it's a valid enum value
     const validGenders = ['Male', 'Female', 'Other'];
     if (gender && typeof gender === 'string') {
@@ -118,7 +120,7 @@ const register = async (req, res, next) => {
     }
     // If gender is not provided or invalid, don't include it in userData at all
     // This prevents Mongoose from trying to validate null/undefined values
-    
+
     // Log userData for debugging (remove password_hash from log)
     console.log('📝 Backend - Creating user with data:', {
       ...userData,
@@ -126,7 +128,7 @@ const register = async (req, res, next) => {
       hasGender: 'gender' in userData,
       genderValue: userData.gender
     });
-    
+
     let user;
     try {
       user = await User.create(userData);
@@ -143,7 +145,7 @@ const register = async (req, res, next) => {
         errors: createError.errors,
         stack: createError.stack
       });
-      
+
       // Return a more descriptive error message
       if (createError.name === 'ValidationError') {
         const validationErrors = Object.values(createError.errors || {}).map(err => ({
@@ -157,7 +159,7 @@ const register = async (req, res, next) => {
           errors: validationErrors
         });
       }
-      
+
       // Re-throw to be handled by error middleware
       throw createError;
     }
@@ -205,7 +207,7 @@ const register = async (req, res, next) => {
         coach_name,
         user_id: user._id
       });
-      
+
       // Validate player-specific required fields - Coach selection is MANDATORY
       if (!selected_coach_id && !coach_id) {
         console.error('❌ Player registration failed: No coach selected');
@@ -214,7 +216,7 @@ const register = async (req, res, next) => {
           message: 'Coach selection is required. Please select your coach from the dropdown.'
         });
       }
-      
+
       if (!player_dojo_name || player_dojo_name.trim() === '') {
         console.error('❌ Player registration failed: No dojo selected');
         return res.status(400).json({
@@ -235,9 +237,9 @@ const register = async (req, res, next) => {
           message: 'Coach selection is required. Please select your coach from the dropdown.'
         });
       }
-      
+
       coach = await Coach.findById(coachId).populate('user_id', 'first_name last_name username');
-      
+
       if (!coach) {
         return res.status(400).json({
           success: false,
@@ -245,32 +247,32 @@ const register = async (req, res, next) => {
         });
       }
 
-        // Get dojo information - find the specific dojo that matches player_dojo_name
-        const Dojo = require('../models/Dojo');
-        let dojo = null;
-        
-        // If player_dojo_name is provided, find the specific dojo by name
-        if (player_dojo_name && player_dojo_name.trim() !== '') {
-          dojo = await Dojo.findOne({ 
-            coach_id: coach._id,
-            dojo_name: { $regex: new RegExp(`^${player_dojo_name.trim()}$`, 'i') }
-          });
-        }
-        
-        // If specific dojo not found, try to find any dojo for this coach
-        if (!dojo) {
-          dojo = await Dojo.findOne({ coach_id: coach._id, is_active: true });
-        }
-        
-        // Use the selected dojo name from form, or dojo from database, or fallback
-        if (player_dojo_name && player_dojo_name.trim() !== '') {
-          // Prefer the selected dojo name from the form
-          finalDojoName = player_dojo_name.trim();
-        } else if (dojo && dojo.dojo_name) {
-          // Fallback to dojo from database
-          finalDojoName = dojo.dojo_name;
-        }
-        
+      // Get dojo information - find the specific dojo that matches player_dojo_name
+      const Dojo = require('../models/Dojo');
+      let dojo = null;
+
+      // If player_dojo_name is provided, find the specific dojo by name
+      if (player_dojo_name && player_dojo_name.trim() !== '') {
+        dojo = await Dojo.findOne({
+          coach_id: coach._id,
+          dojo_name: { $regex: new RegExp(`^${player_dojo_name.trim()}$`, 'i') }
+        });
+      }
+
+      // If specific dojo not found, try to find any dojo for this coach
+      if (!dojo) {
+        dojo = await Dojo.findOne({ coach_id: coach._id, is_active: true });
+      }
+
+      // Use the selected dojo name from form, or dojo from database, or fallback
+      if (player_dojo_name && player_dojo_name.trim() !== '') {
+        // Prefer the selected dojo name from the form
+        finalDojoName = player_dojo_name.trim();
+      } else if (dojo && dojo.dojo_name) {
+        // Fallback to dojo from database
+        finalDojoName = dojo.dojo_name;
+      }
+
       // Get coach name from user
       if (coach.user_id) {
         finalCoachName = coach.user_id.first_name && coach.user_id.last_name
@@ -286,7 +288,7 @@ const register = async (req, res, next) => {
           message: 'Coach name is required for player registration'
         });
       }
-      
+
       if (!finalDojoName || finalDojoName.trim() === '') {
         console.error('❌ Player registration failed: finalDojoName is empty');
         return res.status(400).json({
@@ -294,7 +296,7 @@ const register = async (req, res, next) => {
           message: 'Dojo name is required for player registration. Please ensure your coach has a dojo set up.'
         });
       }
-      
+
       console.log('🔵 Player registration - Validated data:', {
         finalCoachName,
         finalDojoName,
@@ -322,7 +324,7 @@ const register = async (req, res, next) => {
               age--;
             }
           }
-          
+
           // Calculate age_category from age or date_of_birth
           let calculatedAgeCategory = 'Under 10'; // Default
           if (age !== null) {
@@ -349,7 +351,7 @@ const register = async (req, res, next) => {
             else if (calculatedAge >= 22 && calculatedAge <= 34) calculatedAgeCategory = '22-34';
             else calculatedAgeCategory = '35+';
           }
-          
+
           // Prepare player data - only include gender if it's a valid enum value
           const playerData = {
             user_id: user._id,
@@ -370,30 +372,30 @@ const register = async (req, res, next) => {
               relationship: null
             }
           };
-          
+
           // Only include age if calculated
           if (age !== null) {
             playerData.age = age;
           }
-          
+
           // Only include gender if it's a valid enum value ('Male' or 'Female')
           // Don't set gender to null as it will fail enum validation
           if (genderRaw && (genderRaw === 'Male' || genderRaw === 'Female')) {
             playerData.gender = genderRaw;
           }
           // If genderRaw is not valid, don't include it (will use model default)
-          
+
           // Only include weight_category if provided (otherwise omit to use default)
-          
+
           // Create Player profile with all available data
           player = await Player.create(playerData);
         }
-        
+
         // Verify player was created successfully
         if (!player || !player._id) {
           throw new Error('Player creation returned null or invalid player object');
         }
-        
+
         // Log for debugging
         console.log('✅ Player created successfully:', {
           player_id: player._id,
@@ -414,7 +416,7 @@ const register = async (req, res, next) => {
           keyPattern: playerError.keyPattern,
           keyValue: playerError.keyValue
         });
-        
+
         // If Player creation fails, we should fail the entire registration
         // because the user account without a Player profile won't work properly
         // Delete the user account that was just created
@@ -424,7 +426,7 @@ const register = async (req, res, next) => {
         } catch (deleteError) {
           console.error('❌ Error deleting user after Player creation failure:', deleteError);
         }
-        
+
         // Return detailed error to frontend
         let errorMessage = 'Failed to create player profile. ';
         if (playerError.code === 11000) {
@@ -435,7 +437,7 @@ const register = async (req, res, next) => {
         } else {
           errorMessage += playerError.message || 'Unknown error';
         }
-        
+
         return res.status(500).json({
           success: false,
           message: errorMessage + ' Please try again or contact support.',
@@ -510,6 +512,27 @@ const login = async (req, res, next) => {
       });
     }
 
+    // Get profile ID based on user type
+    let profileId = null;
+    let organizationName = null;
+
+    if (user.user_type === 'Player') {
+      const player = await Player.findOne({ user_id: user._id });
+      if (player) profileId = player._id;
+    } else if (user.user_type === 'Coach') {
+      const coach = await Coach.findOne({ user_id: user._id });
+      if (coach) profileId = coach._id;
+    } else if (user.user_type === 'Judge') {
+      const judge = await Judge.findOne({ user_id: user._id });
+      if (judge) profileId = judge._id;
+    } else if (user.user_type === 'Organizer') {
+      const organizer = await Organizer.findOne({ user_id: user._id });
+      if (organizer) {
+        profileId = organizer._id;
+        organizationName = organizer.organization_name;
+      }
+    }
+
     // Generate token
     const token = generateToken(user._id, user.user_type);
 
@@ -524,7 +547,13 @@ const login = async (req, res, next) => {
           first_name: user.first_name,
           last_name: user.last_name,
           user_type: user.user_type,
-          profile_picture: user.profile_picture
+          profile_picture: user.profile_picture,
+          // Add profile IDs to user object
+          player_id: user.user_type === 'Player' ? profileId : undefined,
+          coach_id: user.user_type === 'Coach' ? profileId : undefined,
+          judge_id: user.user_type === 'Judge' ? profileId : undefined,
+          organizer_id: user.user_type === 'Organizer' ? profileId : undefined,
+          organization_name: organizationName
         },
         token
       }
@@ -541,9 +570,39 @@ const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select('-password_hash');
 
+    // Get profile ID based on user type
+    let profileId = null;
+    let organizationName = null;
+
+    if (user.user_type === 'Player') {
+      const player = await Player.findOne({ user_id: user._id });
+      if (player) profileId = player._id;
+    } else if (user.user_type === 'Coach') {
+      const coach = await Coach.findOne({ user_id: user._id });
+      if (coach) profileId = coach._id;
+    } else if (user.user_type === 'Judge') {
+      const judge = await Judge.findOne({ user_id: user._id });
+      if (judge) profileId = judge._id;
+    } else if (user.user_type === 'Organizer') {
+      const organizer = await Organizer.findOne({ user_id: user._id });
+      if (organizer) {
+        profileId = organizer._id;
+        organizationName = organizer.organization_name;
+      }
+    }
+
+    const userData = {
+      ...user.toObject(),
+      player_id: user.user_type === 'Player' ? profileId : undefined,
+      coach_id: user.user_type === 'Coach' ? profileId : undefined,
+      judge_id: user.user_type === 'Judge' ? profileId : undefined,
+      organizer_id: user.user_type === 'Organizer' ? profileId : undefined,
+      organization_name: organizationName
+    };
+
     res.status(200).json({
       success: true,
-      data: user
+      data: userData
     });
   } catch (error) {
     next(error);
@@ -600,7 +659,7 @@ const forgotPassword = async (req, res, next) => {
 
     try {
       const emailResult = await sendPasswordResetOTP(user.email, otp);
-      
+
       // Check if email was actually sent
       if (!emailResult || !emailResult.success) {
         // In development, log the OTP to console for testing
@@ -612,7 +671,7 @@ const forgotPassword = async (req, res, next) => {
           console.log(`OTP: ${otp}`);
           console.log(`Expires: ${new Date(resetPasswordOTPExpire).toLocaleString()}`);
           console.log('========================================\n');
-          
+
           // Don't clear the OTP in development so user can still use it
           return res.status(200).json({
             success: true,
@@ -648,7 +707,7 @@ const forgotPassword = async (req, res, next) => {
         console.log(`OTP: ${otp}`);
         console.log(`Expires: ${new Date(resetPasswordOTPExpire).toLocaleString()}`);
         console.log('========================================\n');
-        
+
         return res.status(200).json({
           success: true,
           message: 'OTP generated. Check server console for the OTP (email error occurred).',
@@ -766,12 +825,12 @@ const resetPassword = async (req, res, next) => {
 // @access  Public (but requires admin registration key)
 const registerAdmin = async (req, res, next) => {
   try {
-    const { 
-      username, 
-      email, 
-      password_hash, 
-      first_name, 
-      last_name, 
+    const {
+      username,
+      email,
+      password_hash,
+      first_name,
+      last_name,
       phone,
       admin_registration_key
     } = req.body;
@@ -787,10 +846,10 @@ const registerAdmin = async (req, res, next) => {
     // Validate admin registration key
     // Option 1: Check if admin_registration_key matches environment variable
     const validAdminKey = process.env.ADMIN_REGISTRATION_KEY || 'ADMIN_REG_KEY_2024';
-    
+
     // Option 2: Allow registration if no admins exist in the system
     const existingAdmins = await User.countDocuments({ user_type: 'Admin' });
-    
+
     if (existingAdmins > 0) {
       // If admins exist, require the registration key
       if (!admin_registration_key || admin_registration_key !== validAdminKey) {
@@ -824,7 +883,7 @@ const registerAdmin = async (req, res, next) => {
       user_type: 'Admin',
       is_active: true
     };
-    
+
     // Add optional phone if provided
     if (phone && phone.trim() !== '') {
       userData.phone = phone.trim();

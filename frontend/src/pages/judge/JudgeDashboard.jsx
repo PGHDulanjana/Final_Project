@@ -91,7 +91,7 @@ const JudgeDashboard = () => {
       ]);
 
       const allMatchesData = matchesRes.data || [];
-      
+
       // Get events assigned to this judge (via Tatami)
       const assignedEventsData = assignedEventsRes.data || [];
       setAssignedEvents(assignedEventsData);
@@ -101,7 +101,7 @@ const JudgeDashboard = () => {
       const assigned = allMatchesData.filter(m => {
         const matchCategoryId = m.category_id?._id || m.category_id;
         return assignedEventCategoryIds.some(catId => String(catId) === String(matchCategoryId)) &&
-               (m.status === 'Scheduled' || m.status === 'In Progress');
+          (m.status === 'Scheduled' || m.status === 'In Progress');
       });
 
 
@@ -124,7 +124,7 @@ const JudgeDashboard = () => {
 
       if (assignedKataEventIds.length > 0) {
         try {
-          const kataPromises = assignedKataEventIds.map(categoryId => 
+          const kataPromises = assignedKataEventIds.map(categoryId =>
             kataPerformanceService.getPerformances({ category_id: categoryId })
               .catch((err) => {
                 console.error(`Error loading performances for category ${categoryId}:`, err);
@@ -151,7 +151,9 @@ const JudgeDashboard = () => {
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      if (error.response?.status !== 401) {
+        toast.error('Failed to load dashboard data');
+      }
     } finally {
       setLoading(false);
     }
@@ -261,11 +263,10 @@ const JudgeDashboard = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${
-                      activeTab === tab.id
+                    className={`flex items-center gap-2 px-4 py-3 font-medium transition whitespace-nowrap ${activeTab === tab.id
                         ? 'border-b-2 border-blue-600 text-blue-600'
                         : 'text-gray-600 hover:text-gray-800'
-                    }`}
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                     {tab.label}
@@ -433,11 +434,10 @@ const JudgeDashboard = () => {
                                 )}
                               </div>
                             </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                              match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-gray-100 text-gray-700'
+                              }`}>
                               {match.status}
                             </span>
                           </div>
@@ -476,11 +476,10 @@ const JudgeDashboard = () => {
                               <h3 className="font-semibold text-gray-800 mb-1">{event.category_name || 'Event'}</h3>
                               <p className="text-sm text-gray-600 mb-2">{tournament.tournament_name || 'Tournament'}</p>
                               <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  event.category_type === 'Kata' || event.category_type === 'Team Kata' 
-                                    ? 'bg-blue-100 text-blue-700' 
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${event.category_type === 'Kata' || event.category_type === 'Team Kata'
+                                    ? 'bg-blue-100 text-blue-700'
                                     : 'bg-red-100 text-red-700'
-                                }`}>
+                                  }`}>
                                   {event.category_type || 'Event'}
                                 </span>
                                 {assignedEvent.is_confirmed ? (
@@ -593,17 +592,17 @@ const JudgeDashboard = () => {
               <div className="bg-white rounded-xl shadow-lg p-6">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6">Tournaments</h2>
                 <p className="text-gray-600 mb-6">Register for tournaments to be assigned to matches. View events and matches for each tournament. Registration is FREE for judges.</p>
-                
+
                 {(() => {
                   // Get current judge's profile ID
                   const currentJudgeId = judgeProfile?._id;
-                  
+
                   // Filter registrations to only include THIS judge's registrations
                   // Backend should already filter by judge_id, but add frontend check for safety
                   const judgeRegistrations = registrations.filter(r => {
                     // Must be a Judge registration
                     if (r.registration_type !== 'Judge') return false;
-                    
+
                     // If we have judge profile, verify the registration belongs to this judge
                     if (currentJudgeId) {
                       const regJudgeId = r.judge_id?._id || r.judge_id;
@@ -611,13 +610,13 @@ const JudgeDashboard = () => {
                       // Match by judge profile ID
                       return String(regJudgeId) === String(currentJudgeId);
                     }
-                    
+
                     // If no judge profile found, backend filtering should handle it
                     // But we'll still filter to be safe - only show if judge_id exists
                     const regJudgeId = r.judge_id?._id || r.judge_id;
                     return !!regJudgeId; // Backend should have filtered, so if judge_id exists, it's likely for this judge
                   });
-                  
+
                   console.log('Judge dashboard - Filtered registrations:', {
                     currentJudgeId,
                     totalRegistrations: registrations.length,
@@ -629,7 +628,7 @@ const JudgeDashboard = () => {
                       tournamentName: r.tournament_id?.tournament_name
                     }))
                   });
-                  
+
                   // Get tournament IDs where THIS judge is registered
                   const registeredTournamentIds = new Set(
                     judgeRegistrations.map(r => {
@@ -637,23 +636,23 @@ const JudgeDashboard = () => {
                       return regTournamentId ? String(regTournamentId) : null;
                     }).filter(id => id !== null)
                   );
-                  
+
                   // Show all tournaments (regardless of status)
                   // Judges should see all tournaments to register for them
-                  const allAvailableTournaments = tournaments.filter(t => 
+                  const allAvailableTournaments = tournaments.filter(t =>
                     // Show tournaments that are Open, Draft, or Ongoing
                     // Exclude only Cancelled and Completed tournaments
                     t.status !== 'Cancelled' && t.status !== 'Completed'
                   );
-                  
+
                   // Split tournaments into registered and available
-                  const registeredTournaments = allAvailableTournaments.filter(t => 
+                  const registeredTournaments = allAvailableTournaments.filter(t =>
                     registeredTournamentIds.has(String(t._id))
                   );
-                  const unregisteredTournaments = allAvailableTournaments.filter(t => 
+                  const unregisteredTournaments = allAvailableTournaments.filter(t =>
                     !registeredTournamentIds.has(String(t._id))
                   );
-                  
+
                   const TournamentCard = ({ tournament, isRegistered, registration }) => {
                     const tournamentCategories = categories.filter(c => {
                       const catTournamentId = c.tournament_id?._id || c.tournament_id;
@@ -673,11 +672,10 @@ const JudgeDashboard = () => {
                               {format(new Date(tournament.start_date), 'MMM dd, yyyy')} - {format(new Date(tournament.end_date), 'MMM dd, yyyy')}
                             </p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
-                            tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${tournament.status === 'Open' ? 'bg-green-100 text-green-700' :
+                              tournament.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                            }`}>
                             {tournament.status}
                           </span>
                         </div>
@@ -701,8 +699,8 @@ const JudgeDashboard = () => {
                             disabled={tournament.status === 'Cancelled' || tournament.status === 'Completed'}
                             title={tournament.status === 'Cancelled' || tournament.status === 'Completed' ? 'Tournament is cancelled or completed' : 'Register for Tournament (FREE)'}
                           >
-                            {tournament.status === 'Cancelled' || tournament.status === 'Completed' 
-                              ? 'Tournament Unavailable' 
+                            {tournament.status === 'Cancelled' || tournament.status === 'Completed'
+                              ? 'Tournament Unavailable'
                               : 'Register for Tournament (FREE)'}
                           </button>
                         )}
@@ -723,7 +721,7 @@ const JudgeDashboard = () => {
                       </div>
                     );
                   };
-                  
+
                   return (
                     <>
                       {/* Registered Tournaments Section */}
@@ -752,7 +750,7 @@ const JudgeDashboard = () => {
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Available Tournaments Section - Always show if there are unregistered tournaments */}
                       {unregisteredTournaments.length > 0 && (
                         <div className="mb-8">
@@ -773,7 +771,7 @@ const JudgeDashboard = () => {
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Show message if no available tournaments but there are registered ones */}
                       {unregisteredTournaments.length === 0 && registeredTournaments.length > 0 && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -783,7 +781,7 @@ const JudgeDashboard = () => {
                           </p>
                         </div>
                       )}
-                      
+
                       {/* Empty State */}
                       {registeredTournaments.length === 0 && unregisteredTournaments.length === 0 && (
                         <div className="text-center py-12">
@@ -915,12 +913,11 @@ const JudgeDashboard = () => {
                               <div key={match._id} className="border border-gray-200 rounded-lg p-4">
                                 <div className="flex items-center justify-between mb-2">
                                   <h4 className="font-semibold text-gray-800">{match.match_name || 'Match'}</h4>
-                                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                    match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                    match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
-                                    match.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                      match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
+                                        match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                          'bg-gray-100 text-gray-700'
+                                    }`}>
                                     {match.status}
                                   </span>
                                 </div>
@@ -957,7 +954,7 @@ const JudgeDashboard = () => {
                     const event = assignment.event;
                     const tournament = assignment.tournament;
                     if (!event || !tournament) return null;
-                    
+
                     return (
                       <div
                         key={assignment._id}
@@ -972,16 +969,15 @@ const JudgeDashboard = () => {
                               {tournament.tournament_name || 'Tournament'}
                             </p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            assignment.status === 'Active' ? 'bg-green-100 text-green-700' :
-                            assignment.status === 'Setup' ? 'bg-yellow-100 text-yellow-700' :
-                            assignment.status === 'Completed' ? 'bg-blue-100 text-blue-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${assignment.status === 'Active' ? 'bg-green-100 text-green-700' :
+                              assignment.status === 'Setup' ? 'bg-yellow-100 text-yellow-700' :
+                                assignment.status === 'Completed' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                            }`}>
                             {assignment.status || 'Setup'}
                           </span>
                         </div>
-                        
+
                         <div className="space-y-2 mb-4">
                           <div className="flex items-center text-sm text-gray-600">
                             <FiAward className="w-4 h-4 mr-2" />
@@ -1076,7 +1072,7 @@ const JudgeDashboard = () => {
             const kumiteEventIds = assignedKumiteEvents.map(e => e.event?._id || e.event).filter(Boolean);
             const kumiteMatches = allMatches.filter(m => {
               const matchCategoryId = m.category_id?._id || m.category_id;
-              return kumiteEventIds.some(eventId => 
+              return kumiteEventIds.some(eventId =>
                 String(matchCategoryId) === String(eventId) || matchCategoryId === eventId
               );
             });
@@ -1138,14 +1134,14 @@ const JudgeDashboard = () => {
                               {category.participation_type || 'Individual'} • {categoryMatches.length} match{categoryMatches.length !== 1 ? 'es' : ''}
                             </p>
                           </div>
-                          
+
                           {categoryMatches.length === 0 ? (
                             <div className="text-center py-8 bg-white rounded-lg">
                               <p className="text-gray-600">No match draws yet. The organizer will create match draws for this event.</p>
                             </div>
                           ) : (
-                            <MatchDrawsBracket 
-                              matches={categoryMatches} 
+                            <MatchDrawsBracket
+                              matches={categoryMatches}
                               category={category}
                             />
                           )}
@@ -1298,14 +1294,14 @@ const JudgeDashboard = () => {
                                         {roundPerformances.length} Player{roundPerformances.length !== 1 ? 's' : ''}
                                       </span>
                                     </div>
-                                    
+
                                     <div className="space-y-2">
                                       {sortedPerformances.map((performance, index) => {
                                         const playerName = performance.player_id?.user_id
                                           ? `${performance.player_id.user_id.first_name || ''} ${performance.player_id.user_id.last_name || ''}`.trim() || performance.player_id.user_id.username
                                           : 'Player';
                                         const scoresCount = performance.scores?.length || 0;
-                                        
+
                                         return (
                                           <div
                                             key={performance._id}
@@ -1400,11 +1396,10 @@ const MatchCard = ({ match }) => {
     <div className="border border-gray-200 rounded-xl p-5 hover:shadow-lg transition">
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-bold text-lg text-gray-800 flex-1">{match.match_name || 'Match'}</h3>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-          match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
+        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${match.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+            match.status === 'Scheduled' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-gray-100 text-gray-700'
+          }`}>
           {match.status}
         </span>
       </div>

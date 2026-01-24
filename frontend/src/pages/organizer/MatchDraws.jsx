@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { matchService } from '../../services/matchService';
 import { categoryService } from '../../services/categoryService';
 import { tournamentService } from '../../services/tournamentService';
@@ -9,6 +9,8 @@ import kumiteReportService from '../../services/kumiteReportService';
 import { toast } from 'react-toastify';
 import Layout from '../../components/Layout';
 import MatchDrawsBracket from '../../components/MatchDrawsBracket';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { FiFilter, FiRefreshCw, FiDownload, FiUsers, FiUser, FiAward, FiTrendingUp, FiFileText } from 'react-icons/fi';
 
 const MatchDraws = () => {
@@ -45,8 +47,9 @@ const MatchDraws = () => {
     if (selectedTournament && selectedCategory) {
       loadMatches();
       loadRegistrations();
-      
+
       // Load Kata performances if it's a Kata event
+      // Use current categories state but don't include it in dependencies to prevent infinite loop
       const categoryData = categories.find(cat => cat._id === selectedCategory);
       if (categoryData && (categoryData.category_type === 'Kata' || categoryData.category_type === 'Team Kata')) {
         loadKataPerformances();
@@ -67,7 +70,8 @@ const MatchDraws = () => {
       setKataPerformances([]);
       setKataReport(null);
     }
-  }, [selectedTournament, selectedCategory, categories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTournament, selectedCategory]); // Removed categories from dependencies to prevent infinite loop
 
   // Auto-refresh matches when they are updated (e.g., when scores are saved in Event Scoring)
   useEffect(() => {
@@ -79,11 +83,12 @@ const MatchDraws = () => {
         if (categoryData && (categoryData.category_type === 'Kata' || categoryData.category_type === 'Team Kata')) {
           loadKataPerformances();
         }
-      }, 5000); // Refresh every 5 seconds to catch match updates
+      }, 30000); // Refresh every 30 seconds (increased to reduce load and prevent loops)
 
       return () => clearInterval(interval);
     }
-  }, [selectedTournament, selectedCategory, categories]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTournament, selectedCategory]); // Removed categories to prevent interval recreation
 
   const loadTournaments = async () => {
     setLoading(true);
@@ -107,21 +112,29 @@ const MatchDraws = () => {
 
   const loadCategoriesForTournament = async () => {
     if (!selectedTournament) return;
-    
+
     setLoadingCategories(true);
     try {
-      const categoriesRes = await categoryService.getCategories({ 
-        tournament_id: selectedTournament 
+      const categoriesRes = await categoryService.getCategories({
+        tournament_id: selectedTournament
       });
-      setCategories(categoriesRes.data || []);
-      
-      // Reset selected category if it's not in the new list
-      if (selectedCategory) {
-        const categoryExists = (categoriesRes.data || []).some(
-          cat => cat._id === selectedCategory
-        );
-        if (!categoryExists) {
-          setSelectedCategory(null);
+      const newCategories = categoriesRes.data || [];
+
+      // Check if categories actually changed before updating
+      const categoriesChanged = JSON.stringify(newCategories.map(c => c._id)) !==
+        JSON.stringify(categories.map(c => c._id));
+
+      if (categoriesChanged) {
+        setCategories(newCategories);
+
+        // Reset selected category if it's not in the new list
+        if (selectedCategory) {
+          const categoryExists = newCategories.some(
+            cat => cat._id === selectedCategory
+          );
+          if (!categoryExists) {
+            setSelectedCategory(null);
+          }
         }
       }
     } catch (error) {
@@ -145,16 +158,16 @@ const MatchDraws = () => {
         tournament: selectedTournament,
         category: selectedCategory
       });
-      
+
       const matchesRes = await matchService.getMatches({
         tournament_id: selectedTournament,
         category_id: selectedCategory,
       });
-      
+
       const matchesData = matchesRes.data || [];
       console.log('✅ Loaded matches:', matchesData.length);
       setMatches(matchesData);
-      
+
       if (matchesData.length === 0) {
         console.log('ℹ️ No matches found. Generate draws to create matches.');
       }
@@ -179,13 +192,13 @@ const MatchDraws = () => {
         tournament: selectedTournament,
         category: selectedCategory
       });
-      
+
       const registrationsRes = await registrationService.getRegistrations({
         tournament_id: selectedTournament,
         category_id: selectedCategory,
         approval_status: 'Approved'
       });
-      
+
       const registrationsData = registrationsRes.data || [];
       console.log('✅ Loaded registrations:', registrationsData.length);
       setRegistrations(registrationsData);
@@ -198,6 +211,36 @@ const MatchDraws = () => {
     }
   };
 
+  // Comprehensive refresh function that reloads all data
+  const handleRefreshAll = async () => {
+    if (!selectedTournament || !selectedCategory) {
+      toast.error('Please select a tournament and category');
+      return;
+    }
+
+    try {
+      // Reload registrations first (to get newly approved players)
+      await loadRegistrations();
+
+      // Reload matches
+      await loadMatches();
+
+      // Reload category-specific data
+      const categoryData = categories.find(cat => cat._id === selectedCategory);
+      if (categoryData && (categoryData.category_type === 'Kata' || categoryData.category_type === 'Team Kata')) {
+        await loadKataPerformances();
+        await loadKataReport();
+      } else if (categoryData && (categoryData.category_type === 'Kumite' || categoryData.category_type === 'Team Kumite')) {
+        await loadKumiteReport();
+      }
+
+      toast.success('Data refreshed successfully! Newly approved players are now visible.');
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      toast.error('Failed to refresh data');
+    }
+  };
+
   const loadKataPerformances = async () => {
     if (!selectedCategory) {
       setKataPerformances([]);
@@ -207,11 +250,11 @@ const MatchDraws = () => {
     setLoadingKataPerformances(true);
     try {
       console.log('🔵 Loading Kata performances for category:', selectedCategory);
-      
-      const response = await kataPerformanceService.getPerformances({ 
-        category_id: selectedCategory 
+
+      const response = await kataPerformanceService.getPerformances({
+        category_id: selectedCategory
       });
-      
+
       const performancesData = response.data || [];
       console.log('✅ Loaded Kata performances:', performancesData.length);
       setKataPerformances(performancesData);
@@ -251,13 +294,24 @@ const MatchDraws = () => {
 
     setGeneratingReport(true);
     try {
+      // First, refresh registrations and performances to ensure we have the latest data
+      console.log('🔄 Refreshing data before generating report...');
+      await loadRegistrations();
+      await loadKataPerformances();
+
+      // Small delay to ensure backend has latest data
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Now generate the report with latest data
       const response = await kataReportService.generateReport(selectedCategory);
-      
+
       if (response.success) {
         toast.success('Kata report generated and published successfully! Players and coaches can now view the results.');
         setKataReport(response.data);
         // Reload performances to get latest data
         await loadKataPerformances();
+        // Reload report to ensure it's fully up to date
+        await loadKataReport();
       } else {
         toast.error(response.message || 'Failed to generate report');
       }
@@ -296,13 +350,24 @@ const MatchDraws = () => {
 
     setGeneratingKumiteReport(true);
     try {
+      // First, refresh registrations and matches to ensure we have the latest data
+      console.log('🔄 Refreshing data before generating report...');
+      await loadRegistrations();
+      await loadMatches();
+
+      // Small delay to ensure backend has latest data
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Now generate the report with latest data
       const response = await kumiteReportService.generateReport(selectedCategory);
-      
+
       if (response.success) {
-        toast.success('Kumite report generated and published successfully! Players and coaches can now view the results.');
+        toast.success('Kumite report generated and published successfully! The report is now visible to organizers, coaches, players, and judges in their dashboards.');
         setKumiteReport(response.data);
         // Reload matches to get latest data
         await loadMatches();
+        // Reload report to ensure it's up to date
+        await loadKumiteReport();
       } else {
         toast.error(response.message || 'Failed to generate report');
       }
@@ -311,6 +376,31 @@ const MatchDraws = () => {
       toast.error(error.response?.data?.message || 'Failed to generate report');
     } finally {
       setGeneratingKumiteReport(false);
+    }
+  };
+
+  const handleGenerateNextRound = async (currentRoundLevel) => {
+    if (!selectedCategory) {
+      toast.error('Please select a category');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await matchService.generateNextRound(selectedCategory, currentRoundLevel);
+
+      if (result.success) {
+        toast.success(result.message || 'Next round generation triggered');
+        // Reload matches to show the newly generated ones
+        await loadMatches();
+      } else {
+        toast.error(result.message || 'Failed to generate next round');
+      }
+    } catch (error) {
+      console.error('Error generating next round:', error);
+      toast.error(error.response?.data?.message || 'Failed to generate next round');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -326,7 +416,7 @@ const MatchDraws = () => {
         tournament: selectedTournament,
         category: selectedCategory
       });
-      
+
       // Force reload registrations first to ensure we have the absolute latest registered players
       setLoadingRegistrations(true);
       try {
@@ -335,21 +425,21 @@ const MatchDraws = () => {
           category_id: selectedCategory,
           approval_status: 'Approved'
         });
-        
+
         const registrationsData = registrationsRes.data || [];
         console.log('✅ Loaded latest registrations:', registrationsData.length);
         setRegistrations(registrationsData);
-        
+
         // Count approved and paid players
-        const paidPlayers = registrationsData.filter(r => 
+        const paidPlayers = registrationsData.filter(r =>
           (r.registration_type === 'Individual' || r.registration_type === 'Team') &&
           r.payment_status === 'Paid'
         ).length;
-        
-        const totalPlayers = registrationsData.filter(r => 
+
+        const totalPlayers = registrationsData.filter(r =>
           r.registration_type === 'Individual' || r.registration_type === 'Team'
         ).length;
-        
+
         if (paidPlayers === 0) {
           toast.warning(`No paid players found. ${totalPlayers} player(s) registered but payment is pending. Only paid players will be included in draws.`);
         } else {
@@ -361,24 +451,24 @@ const MatchDraws = () => {
       } finally {
         setLoadingRegistrations(false);
       }
-      
+
       // Small delay to ensure backend gets fresh data
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       console.log('🔵 Frontend: Calling generateDraws API...', {
         tournament: selectedTournament,
         category: selectedCategory
       });
-      
+
       const result = await matchService.generateDraws(selectedTournament, selectedCategory, true);
-      
+
       console.log('✅ Frontend: Received response:', result);
-      
+
       if (result.success) {
-        let message = result.data.warning 
+        let message = result.data.warning
           ? `Match draws generated! ${result.data.warning}`
           : `Match draws generated successfully using AI! Created ${result.data.matchesCreated || 0} matches.`;
-        
+
         // Add judge assignment information
         if (result.data.judgesAssigned) {
           const { totalJudges, judgesPerMatch, totalAssignments, unconfirmedJudges } = result.data.judgesAssigned;
@@ -390,21 +480,21 @@ const MatchDraws = () => {
             message += ` No judges assigned to this event.`;
           }
         }
-        
+
         toast.success(message, { autoClose: 6000 });
-        
+
         if (result.data.explanation) {
           console.log('📊 Bracket Explanation:', result.data.explanation);
           // Optionally show explanation in a toast or modal
           toast.info(result.data.explanation.substring(0, 100) + '...', { autoClose: 5000 });
         }
-        
+
         // Reload matches to show the newly generated ones
         await loadMatches();
-        
+
         // Reload registrations again to show any updates
         await loadRegistrations();
-        
+
         toast.info('Matches are now available in Event Scoring tab', { autoClose: 3000 });
       } else {
         toast.error(result.message || 'Failed to generate match draws');
@@ -416,18 +506,240 @@ const MatchDraws = () => {
         response: error.response?.data,
         status: error.response?.status
       });
-      
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          error.message || 
-                          'Failed to generate match draws. Please check your Gemini API key configuration.';
+
+      const errorMessage = error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to generate match draws. Please check your Gemini API key configuration.';
       toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Categories are already filtered by tournament_id from the API
+  const generateKataPDF = () => {
+    if (!kataPerformances || kataPerformances.length === 0) {
+      toast.error('No performance data to generate report');
+      return;
+    }
+
+    const doc = new jsPDF();
+    const tournamentName = tournaments.find(t => t._id === selectedTournament)?.tournament_name || 'Tournament';
+    const categoryName = categories.find(c => c._id === selectedCategory)?.category_name || 'Category';
+    const timestamp = new Date().toLocaleString();
+
+    // Add Header
+    doc.setFontSize(18);
+    doc.text('Kata Event Report', 14, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Tournament: ${tournamentName}`, 14, 30);
+    doc.text(`Category: ${categoryName}`, 14, 38);
+    doc.text(`Generated: ${timestamp}`, 14, 46);
+
+    // Group performances by round
+    const roundsMap = {};
+    kataPerformances.forEach(perf => {
+      const round = perf.round || 'First Round';
+      if (!roundsMap[round]) {
+        roundsMap[round] = [];
+      }
+      roundsMap[round].push(perf);
+    });
+
+    // Define round order
+    const roundOrder = ['First Round', 'Second Round (Final 8)', 'Third Round (Final 4)', 'Final Round'];
+
+    let yPos = 55;
+
+    roundOrder.forEach(roundName => {
+      if (!roundsMap[roundName]) return;
+
+      const performances = roundsMap[roundName].sort((a, b) => {
+        // Same sorting logic as UI
+        if (roundName === 'Third Round (Final 4)') {
+          if (a.place !== null && b.place !== null) {
+            return a.place - b.place;
+          }
+          if (a.place !== null) return -1;
+          if (b.place !== null) return 1;
+        }
+        if (a.final_score === null && b.final_score !== null) return 1;
+        if (a.final_score !== null && b.final_score === null) return -1;
+        if (a.final_score === null && b.final_score === null) {
+          return (a.performance_order || 0) - (b.performance_order || 0);
+        }
+        return (b.final_score || 0) - (a.final_score || 0);
+      });
+
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0); // Black
+      doc.text(roundName, 14, yPos);
+      yPos += 5;
+
+      const tableBody = performances.map((perf, index) => {
+        const playerName = perf.player_id?.user_id
+          ? `${perf.player_id.user_id.first_name || ''} ${perf.player_id.user_id.last_name || ''}`.trim() || perf.player_id.user_id.username
+          : 'Unknown Player';
+
+        const dojo = perf.player_id?.dojo_name || 'N/A';
+        const score = perf.final_score !== null && perf.final_score !== undefined ? perf.final_score.toFixed(1) : '-';
+
+        let rank = (index + 1).toString();
+        if (roundName === 'Third Round (Final 4)' && perf.place) {
+          rank = perf.place === 1 ? '1st (Gold)' : perf.place === 2 ? '2nd (Silver)' : '3rd (Bronze)';
+        }
+
+        return [rank, playerName, dojo, score];
+      });
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Rank', 'Player Name', 'Dojo', 'Score']],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        styles: { fontSize: 10, cellPadding: 3 },
+        margin: { top: 10 },
+        didDrawPage: (data) => {
+          yPos = data.cursor.y;
+        }
+      });
+
+      yPos = doc.lastAutoTable.finalY + 15;
+    });
+
+    doc.save(`Kata_Report_${tournamentName}_${categoryName}.pdf`);
+    toast.success('Report downloaded successfully');
+  };
+
+  const generateBracketPDF = () => {
+    if (!matches || matches.length === 0) {
+      toast.error('No matches to generate report');
+      return;
+    }
+
+    const doc = new jsPDF();
+    const tournamentName = tournaments.find(t => t._id === selectedTournament)?.tournament_name || 'Tournament';
+    const categoryName = categories.find(c => c._id === selectedCategory)?.category_name || 'Category';
+    const timestamp = new Date().toLocaleString();
+
+    // Add Header
+    doc.setFontSize(18);
+    doc.text('Tournament Match Bracket Report', 14, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Tournament: ${tournamentName}`, 14, 30);
+    doc.text(`Category: ${categoryName}`, 14, 38);
+    doc.text(`Generated: ${timestamp}`, 14, 46);
+
+    // Group matches by round (similar functionality to MatchDrawsBracket)
+    const roundsMap = {};
+    matches.forEach(match => {
+      const level = match.match_level || 'Preliminary';
+      if (!roundsMap[level]) {
+        roundsMap[level] = [];
+      }
+      roundsMap[level].push(match);
+    });
+
+    const roundOrder = ['Preliminary', 'Quarterfinal', 'Semifinal', 'Bronze', 'Final'];
+    const sortedRounds = roundOrder.filter(level => roundsMap[level]);
+
+    // Check for any rounds not in standard order (e.g. Round 1, Round 2) and append them
+    Object.keys(roundsMap).forEach(level => {
+      if (!roundOrder.includes(level)) {
+        if (!sortedRounds.includes(level)) {
+          // Insert before Semifinal/Final if possible, or just push
+          // Simple approach: push to processed list if not exists
+          sortedRounds.push(level);
+        }
+      }
+    });
+
+    // Sort to ensure Preliminary -> ... -> Final
+    // (Existing sortedRounds is mainly based on explicit order, others appended)
+
+    let yPos = 55;
+
+    sortedRounds.forEach(roundName => {
+      const roundMatches = roundsMap[roundName].sort((a, b) => (a.match_name || '').localeCompare(b.match_name || ''));
+
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0); // Black
+      doc.text(roundName, 14, yPos);
+      yPos += 5;
+
+      const tableBody = roundMatches.map(match => {
+        const participant1 = match.participants && match.participants[0]
+          ? getParticipantNamePDF(match.participants[0])
+          : 'Bye';
+
+        const participant2 = match.participants && match.participants[1]
+          ? getParticipantNamePDF(match.participants[1])
+          : 'Bye';
+
+        const winnerId = match.winner_id;
+        let winnerName = '-';
+        if (match.status === 'Completed' && winnerId) {
+          // Robust winner finding logic - handle both object and string IDs
+          const winnerIdStr = (match.winner_id?._id || match.winner_id)?.toString();
+
+          if (winnerIdStr) {
+            const winnerPart = match.participants?.find(p => {
+              const pPlayerId = (p.player_id?._id || p.player_id)?.toString();
+              const pTeamId = (p.team_id?._id || p.team_id)?.toString();
+              const pPartId = p._id?.toString();
+
+              return pPlayerId === winnerIdStr || pTeamId === winnerIdStr || pPartId === winnerIdStr;
+            });
+            if (winnerPart) winnerName = getParticipantNamePDF(winnerPart);
+          }
+        }
+
+        return [
+          match.match_name || match.match_level,
+          participant1,
+          participant2,
+          match.status,
+          winnerName
+        ];
+      });
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Match', 'Participant 1', 'Participant 2', 'Status', 'Winner']],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        styles: { fontSize: 10, cellPadding: 3 },
+        margin: { top: 10 },
+        didDrawPage: (data) => {
+          // Resets yPos if page breaks
+          yPos = data.cursor.y;
+        }
+      });
+
+      yPos = doc.lastAutoTable.finalY + 15;
+    });
+
+    doc.save(`Bracket_Report_${tournamentName}_${categoryName}.pdf`);
+    toast.success('PDF Report downloaded successfully');
+  };
+
+  const getParticipantNamePDF = (participant) => {
+    if (participant.player_id?.user_id) {
+      const user = participant.player_id.user_id;
+      if (user.first_name || user.last_name) {
+        return `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      }
+      return user.username || 'Unknown Player';
+    }
+    if (participant.team_id) {
+      return participant.team_id.team_name || 'Unknown Team';
+    }
+    return 'Bye';
+  };
   // But we'll keep this for safety in case categories are populated
   const filteredCategories = categories.filter(cat => {
     const catTournamentId = cat.tournament_id?._id || cat.tournament_id;
@@ -502,23 +814,34 @@ const MatchDraws = () => {
               {selectedCategoryData && (selectedCategoryData.category_type === 'Kata' || selectedCategoryData.category_type === 'Team Kata') ? (
                 <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <p className="text-sm text-yellow-800">
-                    <strong>Kata Event:</strong> Players perform individually. No matches needed. 
+                    <strong>Kata Event:</strong> Players perform individually. No matches needed.
                     Use the <strong>Event Scoring</strong> tab to create Kata performances for rounds.
                   </p>
                 </div>
               ) : (
-                <button
-                  onClick={handleGenerateDraws}
-                  disabled={!selectedTournament || !selectedCategory}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                >
-                  <FiRefreshCw className="mr-2" />
-                  Generate AI Draws
-                </button>
+                <>
+                  <button
+                    onClick={generateBracketPDF}
+                    disabled={!selectedTournament || !selectedCategory || matches.length === 0}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center mr-2"
+                  >
+                    <FiFileText className="mr-2" />
+                    Download Report
+                  </button>
+                  <button
+                    onClick={handleGenerateDraws}
+                    disabled={!selectedTournament || !selectedCategory}
+                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    <FiRefreshCw className="mr-2" />
+                    Generate AI Draws
+                  </button>
+                </>
               )}
               <button
-                onClick={loadMatches}
+                onClick={handleRefreshAll}
                 className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center justify-center"
+                title="Refresh all data including newly approved players"
               >
                 <FiRefreshCw />
               </button>
@@ -534,9 +857,20 @@ const MatchDraws = () => {
                 <FiUsers className="mr-2" />
                 Registered Players for {selectedCategoryData?.category_name || 'Category'}
               </h2>
-              <span className="text-sm text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
-                {loadingRegistrations ? 'Loading...' : `${registrations.length} Registered`}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
+                  {loadingRegistrations ? 'Loading...' : `${registrations.length} Registered`}
+                </span>
+                <button
+                  onClick={loadRegistrations}
+                  className="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 flex items-center text-sm"
+                  disabled={loadingRegistrations}
+                  title="Refresh registered players list"
+                >
+                  <FiRefreshCw className={`mr-1 ${loadingRegistrations ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
             </div>
 
             {loadingRegistrations ? (
@@ -558,14 +892,14 @@ const MatchDraws = () => {
                     const playerName = registration.player_id?.user_id?.first_name && registration.player_id?.user_id?.last_name
                       ? `${registration.player_id.user_id.first_name} ${registration.player_id.user_id.last_name}`
                       : registration.player_id?.user_id?.username
-                      ? registration.player_id.user_id.username
-                      : registration.team_id?.team_name
-                      ? registration.team_id.team_name
-                      : `Player ${index + 1}`;
-                    
+                        ? registration.player_id.user_id.username
+                        : registration.team_id?.team_name
+                          ? registration.team_id.team_name
+                          : `Player ${index + 1}`;
+
                     const belt = registration.player_id?.belt_rank || 'N/A';
                     const dojo = registration.player_id?.dojo_name || registration.team_id?.dojo_id?.dojo_name || 'N/A';
-                    
+
                     return (
                       <div
                         key={registration._id}
@@ -594,11 +928,10 @@ const MatchDraws = () => {
                               )}
                               <p>
                                 <span className="font-medium">Payment:</span>{' '}
-                                <span className={`px-2 py-0.5 rounded text-xs ${
-                                  registration.payment_status === 'Paid'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-yellow-100 text-yellow-800'
-                                }`}>
+                                <span className={`px-2 py-0.5 rounded text-xs ${registration.payment_status === 'Paid'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
                                   {registration.payment_status}
                                 </span>
                               </p>
@@ -647,17 +980,28 @@ const MatchDraws = () => {
                     <FiFileText className={`mr-2 ${generatingReport ? 'animate-pulse' : ''}`} />
                     {generatingReport ? 'Generating...' : kataReport ? 'Regenerate Report' : 'Generate Report'}
                   </button>
+                  {kataReport && (
+                    <button
+                      onClick={generateKataPDF}
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center"
+                      title="Download PDF Report"
+                    >
+                      <FiDownload className="mr-2" />
+                      Download PDF
+                    </button>
+                  )}
                   <button
-                    onClick={loadKataPerformances}
+                    onClick={handleRefreshAll}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-                    disabled={loadingKataPerformances}
+                    disabled={loadingKataPerformances || loadingRegistrations}
+                    title="Refresh all data including newly approved players"
                   >
-                    <FiRefreshCw className={`mr-2 ${loadingKataPerformances ? 'animate-spin' : ''}`} />
+                    <FiRefreshCw className={`mr-2 ${(loadingKataPerformances || loadingRegistrations) ? 'animate-spin' : ''}`} />
                     Refresh
                   </button>
                 </div>
               </div>
-              
+
               {loadingKataPerformances ? (
                 <div className="flex justify-center items-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -677,7 +1021,7 @@ const MatchDraws = () => {
 
                   // Define round order
                   const roundOrder = ['First Round', 'Second Round (Final 8)', 'Third Round (Final 4)', 'Final Round'];
-                  
+
                   // Sort rounds by order
                   const rounds = roundOrder
                     .filter(round => roundsMap[round] && roundsMap[round].length > 0)
@@ -729,41 +1073,38 @@ const MatchDraws = () => {
                               </span>
                             </div>
                           </div>
-                          
+
                           <div className="divide-y divide-gray-200">
                             {round.performances.map((perf, index) => {
                               const playerName = perf.player_id?.user_id
                                 ? `${perf.player_id.user_id.first_name || ''} ${perf.player_id.user_id.last_name || ''}`.trim() || perf.player_id.user_id.username
                                 : 'Unknown Player';
-                              
+
                               const belt = perf.player_id?.belt_rank || 'N/A';
                               const dojo = perf.player_id?.dojo_name || 'N/A';
-                              
+
                               return (
                                 <div
                                   key={perf._id}
-                                  className={`p-4 hover:bg-gray-50 transition ${
-                                    index < 3 ? 'bg-gradient-to-r from-yellow-50 to-transparent' : ''
-                                  }`}
+                                  className={`p-4 hover:bg-gray-50 transition ${index < 3 ? 'bg-gradient-to-r from-yellow-50 to-transparent' : ''
+                                    }`}
                                 >
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-4 flex-1">
                                       {/* Display ranking for Final 4, otherwise show position number */}
                                       {round.name === 'Third Round (Final 4)' && perf.place !== null && perf.place !== undefined ? (
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm ${
-                                          perf.place === 1 ? 'bg-yellow-400 text-yellow-900' :
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm ${perf.place === 1 ? 'bg-yellow-400 text-yellow-900' :
                                           perf.place === 2 ? 'bg-gray-300 text-gray-800' :
-                                          'bg-orange-300 text-orange-900'
-                                        }`}>
+                                            'bg-orange-300 text-orange-900'
+                                          }`}>
                                           {perf.place === 1 ? '🥇' : perf.place === 2 ? '🥈' : '🥉'}
                                         </div>
                                       ) : (
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                                          index === 0 ? 'bg-yellow-400 text-yellow-900' :
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${index === 0 ? 'bg-yellow-400 text-yellow-900' :
                                           index === 1 ? 'bg-gray-300 text-gray-800' :
-                                          index === 2 ? 'bg-orange-300 text-orange-900' :
-                                          'bg-blue-100 text-blue-600'
-                                        }`}>
+                                            index === 2 ? 'bg-orange-300 text-orange-900' :
+                                              'bg-blue-100 text-blue-600'
+                                          }`}>
                                           {index + 1}
                                         </div>
                                       )}
@@ -773,23 +1114,21 @@ const MatchDraws = () => {
                                           <h4 className="font-semibold text-gray-800">{playerName}</h4>
                                           {/* Display ranking badge for Final 4 */}
                                           {round.name === 'Third Round (Final 4)' && perf.place !== null && perf.place !== undefined && (
-                                            <span className={`px-3 py-1 rounded text-xs font-bold ${
-                                              perf.place === 1 ? 'bg-yellow-200 text-yellow-800' :
+                                            <span className={`px-3 py-1 rounded text-xs font-bold ${perf.place === 1 ? 'bg-yellow-200 text-yellow-800' :
                                               perf.place === 2 ? 'bg-gray-200 text-gray-800' :
-                                              'bg-orange-200 text-orange-800'
-                                            }`}>
+                                                'bg-orange-200 text-orange-800'
+                                              }`}>
                                               {perf.place === 1 ? '🥇 1st Place' :
-                                               perf.place === 2 ? '🥈 2nd Place' :
-                                               '🥉 3rd Place'}
+                                                perf.place === 2 ? '🥈 2nd Place' :
+                                                  '🥉 3rd Place'}
                                             </span>
                                           )}
                                           {/* Display medal for other rounds */}
                                           {round.name !== 'Third Round (Final 4)' && index < 3 && (
-                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                              index === 0 ? 'bg-yellow-200 text-yellow-800' :
+                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${index === 0 ? 'bg-yellow-200 text-yellow-800' :
                                               index === 1 ? 'bg-gray-200 text-gray-800' :
-                                              'bg-orange-200 text-orange-800'
-                                            }`}>
+                                                'bg-orange-200 text-orange-800'
+                                              }`}>
                                               {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
                                             </span>
                                           )}
@@ -847,15 +1186,17 @@ const MatchDraws = () => {
                     {generatingKumiteReport ? 'Generating...' : 'Regenerate Report'}
                   </button>
                   <button
-                    onClick={loadMatches}
+                    onClick={handleRefreshAll}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
+                    disabled={loadingRegistrations}
+                    title="Refresh all data including newly approved players"
                   >
-                    <FiRefreshCw className="mr-2" />
+                    <FiRefreshCw className={`mr-2 ${loadingRegistrations ? 'animate-spin' : ''}`} />
                     Refresh
                   </button>
                 </div>
               </div>
-              
+
               {kumiteReport.report_data && kumiteReport.report_data.rounds && kumiteReport.report_data.rounds.length > 0 ? (
                 <div className="space-y-6">
                   {kumiteReport.report_data.rounds.map((round, roundIndex) => (
@@ -871,18 +1212,17 @@ const MatchDraws = () => {
                           </span>
                         </div>
                       </div>
-                      
+
                       <div className="divide-y divide-gray-200">
                         {round.matches.map((match, matchIndex) => (
                           <div key={matchIndex} className="p-4 hover:bg-gray-50 transition">
                             <div className="mb-3">
                               <div className="flex items-center justify-between mb-2">
                                 <h5 className="font-semibold text-gray-800">{match.match_name}</h5>
-                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                  match.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${match.status === 'Completed' ? 'bg-green-100 text-green-800' :
                                   match.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
                                   {match.status}
                                 </span>
                               </div>
@@ -892,16 +1232,15 @@ const MatchDraws = () => {
                                 </p>
                               )}
                             </div>
-                            
+
                             <div className="space-y-2">
                               {match.participants && match.participants.map((participant, pIndex) => (
                                 <div
                                   key={pIndex}
-                                  className={`p-3 rounded-lg border-2 ${
-                                    participant.is_winner
-                                      ? 'bg-green-50 border-green-300'
-                                      : 'bg-gray-50 border-gray-200'
-                                  }`}
+                                  className={`p-3 rounded-lg border-2 ${participant.is_winner
+                                    ? 'bg-green-50 border-green-300'
+                                    : 'bg-gray-50 border-gray-200'
+                                    }`}
                                 >
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 flex-1">
@@ -929,11 +1268,10 @@ const MatchDraws = () => {
                                       </div>
                                     </div>
                                     <div className="text-right">
-                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                        participant.result === 'Win' ? 'bg-green-200 text-green-800' :
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${participant.result === 'Win' ? 'bg-green-200 text-green-800' :
                                         participant.result === 'Loss' ? 'bg-red-200 text-red-800' :
-                                        'bg-gray-200 text-gray-800'
-                                      }`}>
+                                          'bg-gray-200 text-gray-800'
+                                        }`}>
                                         {participant.result || 'Pending'}
                                       </span>
                                     </div>
@@ -941,7 +1279,7 @@ const MatchDraws = () => {
                                 </div>
                               ))}
                             </div>
-                            
+
                             {match.winner && (
                               <div className="mt-3 pt-3 border-t border-gray-200">
                                 <p className="text-sm font-semibold text-green-700">
@@ -952,7 +1290,7 @@ const MatchDraws = () => {
                           </div>
                         ))}
                       </div>
-                      
+
                       {round.advanced_players && round.advanced_players.length > 0 && (
                         <div className="bg-blue-50 border-t border-blue-200 px-6 py-3">
                           <p className="text-sm font-semibold text-blue-800 mb-2">
@@ -969,7 +1307,7 @@ const MatchDraws = () => {
                       )}
                     </div>
                   ))}
-                  
+
                   {/* Final Rankings */}
                   {kumiteReport.report_data.final_rankings && kumiteReport.report_data.final_rankings.length > 0 && (
                     <div className="border border-yellow-300 rounded-lg overflow-hidden bg-gradient-to-r from-yellow-50 to-orange-50">
@@ -984,18 +1322,16 @@ const MatchDraws = () => {
                           {kumiteReport.report_data.final_rankings.map((ranking, index) => (
                             <div
                               key={index}
-                              className={`p-4 rounded-lg border-2 ${
-                                ranking.place === 1 ? 'bg-yellow-100 border-yellow-400' :
+                              className={`p-4 rounded-lg border-2 ${ranking.place === 1 ? 'bg-yellow-100 border-yellow-400' :
                                 ranking.place === 2 ? 'bg-gray-100 border-gray-400' :
-                                'bg-orange-100 border-orange-400'
-                              }`}
+                                  'bg-orange-100 border-orange-400'
+                                }`}
                             >
                               <div className="flex items-center gap-3">
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
-                                  ranking.place === 1 ? 'bg-yellow-400 text-yellow-900' :
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${ranking.place === 1 ? 'bg-yellow-400 text-yellow-900' :
                                   ranking.place === 2 ? 'bg-gray-300 text-gray-800' :
-                                  'bg-orange-300 text-orange-900'
-                                }`}>
+                                    'bg-orange-300 text-orange-900'
+                                  }`}>
                                   {ranking.place === 1 ? '🥇' : ranking.place === 2 ? '🥈' : '🥉'}
                                 </div>
                                 <div className="flex-1">
@@ -1030,7 +1366,7 @@ const MatchDraws = () => {
               <FiFilter className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 mb-4">No match draws generated yet for this category</p>
               <p className="text-sm text-gray-500 mb-2">
-                {registrations.length > 0 
+                {registrations.length > 0
                   ? `There are ${registrations.filter(r => r.registration_type === 'Individual' || r.registration_type === 'Team').length} registered players. Click "Generate AI Draws" to create match brackets.`
                   : 'No registered players found. Players need to register first before generating match draws.'}
               </p>
@@ -1059,6 +1395,61 @@ const MatchDraws = () => {
                   </button>
                 </div>
               )}
+
+              {/* Check if next round needs to be generated */}
+              {(() => {
+                const preliminaryMatches = matches.filter(m => m.match_level === 'Preliminary');
+                const quarterfinalMatches = matches.filter(m => m.match_level === 'Quarterfinal');
+                const semifinalMatches = matches.filter(m => m.match_level === 'Semifinal');
+                const finalMatches = matches.filter(m => m.match_level === 'Final');
+
+                // Check if all preliminary matches are completed but quarterfinals don't exist
+                const allPreliminaryCompleted = preliminaryMatches.length > 0 &&
+                  preliminaryMatches.every(m => m.status === 'Completed') &&
+                  quarterfinalMatches.length === 0;
+
+                // Check if all quarterfinal matches are completed but semifinals don't exist
+                const allQuarterfinalCompleted = quarterfinalMatches.length > 0 &&
+                  quarterfinalMatches.every(m => m.status === 'Completed') &&
+                  semifinalMatches.length === 0;
+
+                // Check if all semifinal matches are completed but final doesn't exist
+                const allSemifinalCompleted = semifinalMatches.length > 0 &&
+                  semifinalMatches.every(m => m.status === 'Completed') &&
+                  finalMatches.length === 0;
+
+                if (allPreliminaryCompleted || allQuarterfinalCompleted || allSemifinalCompleted) {
+                  const roundToGenerate = allPreliminaryCompleted ? 'Preliminary' :
+                    allQuarterfinalCompleted ? 'Quarterfinal' : 'Semifinal';
+                  const nextRoundName = allPreliminaryCompleted ? 'Quarterfinal' :
+                    allQuarterfinalCompleted ? 'Semifinal' : 'Final';
+
+                  return (
+                    <div className="mb-4 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-bold text-yellow-800 mb-1 flex items-center">
+                            <FiTrendingUp className="mr-2" />
+                            Ready for {nextRoundName} Round
+                          </h3>
+                          <p className="text-sm text-yellow-700">
+                            All {roundToGenerate} matches are completed. Click below to generate {nextRoundName.toLowerCase()} matches with winners.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleGenerateNextRound(roundToGenerate)}
+                          className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={loading}
+                        >
+                          <FiRefreshCw className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+                          {loading ? 'Generating...' : `Generate ${nextRoundName} Matches`}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Show Match Draws Bracket for all event types */}
               <MatchDrawsBracket
