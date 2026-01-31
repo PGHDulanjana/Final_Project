@@ -90,7 +90,7 @@ const createTournament = async (req, res, next) => {
       });
     }
 
-    // Find or create organizer profile
+    // Find organizer profile
     let organizer = await Organizer.findOne({ user_id: req.user._id });
     if (!organizer) {
       // Get user details for better organization name

@@ -89,32 +89,29 @@ const getMatches = async (req, res, next) => {
       // Check if all preliminary matches are completed but quarterfinals don't exist
       const preliminaryMatches = matchesWithParticipants.filter(m => m.match_level === 'Preliminary');
       const quarterfinalMatches = matchesWithParticipants.filter(m => m.match_level === 'Quarterfinal');
-      
-      if (preliminaryMatches.length > 0 && 
-          preliminaryMatches.every(m => m.status === 'Completed') && 
-          quarterfinalMatches.length === 0) {
-        // Trigger next round generation in background
-        checkAndGenerateNextRound(category_id, 'Preliminary').catch(err => 
+
+      if (preliminaryMatches.length > 0 &&
+        preliminaryMatches.every(m => m.status === 'Completed')) {
+        // Trigger next round generation in background - will handle existing matches gracefully
+        checkAndGenerateNextRound(category_id, 'Preliminary').catch(err =>
           console.error('Auto-check: Error generating next round:', err)
         );
       }
-      
+
       // Check if all quarterfinal matches are completed but semifinals don't exist
       const semifinalMatches = matchesWithParticipants.filter(m => m.match_level === 'Semifinal');
-      if (quarterfinalMatches.length > 0 && 
-          quarterfinalMatches.every(m => m.status === 'Completed') && 
-          semifinalMatches.length === 0) {
-        checkAndGenerateNextRound(category_id, 'Quarterfinal').catch(err => 
+      if (quarterfinalMatches.length > 0 &&
+        quarterfinalMatches.every(m => m.status === 'Completed')) {
+        checkAndGenerateNextRound(category_id, 'Quarterfinal').catch(err =>
           console.error('Auto-check: Error generating next round:', err)
         );
       }
-      
+
       // Check if all semifinal matches are completed but final doesn't exist
       const finalMatches = matchesWithParticipants.filter(m => m.match_level === 'Final');
-      if (semifinalMatches.length > 0 && 
-          semifinalMatches.every(m => m.status === 'Completed') && 
-          finalMatches.length === 0) {
-        checkAndGenerateNextRound(category_id, 'Semifinal').catch(err => 
+      if (semifinalMatches.length > 0 &&
+        semifinalMatches.every(m => m.status === 'Completed')) {
+        checkAndGenerateNextRound(category_id, 'Semifinal').catch(err =>
           console.error('Auto-check: Error generating next round:', err)
         );
       }
@@ -246,7 +243,7 @@ const updateMatch = async (req, res, next) => {
     }
 
     const wasCompleted = match.status === 'Completed';
-    
+
     match = await Match.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
@@ -255,7 +252,7 @@ const updateMatch = async (req, res, next) => {
     // If match was just completed (transitioned from non-completed to completed), check if we need to generate next round
     if (!wasCompleted && match.status === 'Completed' && match.match_level && match.category_id) {
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
     }
@@ -352,7 +349,7 @@ const generateDraws = async (req, res, next) => {
 
     let result;
     const hasGeminiKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '';
-    
+
     console.log('🔵 Generate Draws Request:', {
       tournament_id,
       category_id,
@@ -393,7 +390,7 @@ const generateDraws = async (req, res, next) => {
     }
 
     // Enhance response with judge assignment summary
-    const responseMessage = result.judgesAssigned 
+    const responseMessage = result.judgesAssigned
       ? `Match draws generated successfully! Created ${result.matchesCreated || result.data?.matchesCreated || 0} matches. ${result.judgesAssigned.totalJudges} confirmed judge(s) assigned to all matches.`
       : `Match draws generated successfully! Created ${result.matchesCreated || result.data?.matchesCreated || 0} matches.`;
 
@@ -408,7 +405,7 @@ const generateDraws = async (req, res, next) => {
       stack: error.stack,
       name: error.name
     });
-    
+
     // Return more detailed error message
     const errorMessage = error.message || 'Failed to generate match draws';
     res.status(500).json({
@@ -423,9 +420,9 @@ const generateDraws = async (req, res, next) => {
 const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
   try {
     const mongoose = require('mongoose');
-    
+
     console.log(`🔄 Checking if next round should be generated for ${currentRoundLevel} in category ${categoryId}`);
-    
+
     // Define round progression
     const roundProgression = {
       'Preliminary': 'Quarterfinal',
@@ -440,8 +437,8 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
     }
 
     // Ensure categoryId is ObjectId
-    const categoryObjectId = mongoose.Types.ObjectId.isValid(categoryId) 
-      ? new mongoose.Types.ObjectId(categoryId) 
+    const categoryObjectId = mongoose.Types.ObjectId.isValid(categoryId)
+      ? new mongoose.Types.ObjectId(categoryId)
       : categoryId;
 
     // Get all matches in the current round for this category
@@ -485,21 +482,21 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
         const existingParticipants = await MatchParticipant.find({
           match_id: existingMatch._id
         });
-        
+
         // If match has no participants or all participants are null (Bye), we should update it
-        if (existingParticipants.length === 0 || 
-            existingParticipants.every(p => !p.player_id && !p.team_id)) {
+        if (existingParticipants.length === 0 ||
+          existingParticipants.every(p => !p.player_id && !p.team_id)) {
           shouldUpdateExisting = true;
           break;
         }
       }
-      
+
       // If all existing matches have real participants, don't update
       if (!shouldUpdateExisting) {
-        console.log(`ℹ️ Next round (${nextRound}) already exists with participants - skipping update`);
-        return;
+        console.log(`ℹ️ Next round (${nextRound}) already exists with participants - checking if we need to add more matches`);
+        // return; // Removed early return to allow creating new matches if needed
       }
-      
+
       console.log(`🔄 Next round (${nextRound}) exists but has empty/Bye participants - will update with winners`);
     }
 
@@ -507,7 +504,7 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
     const winners = [];
     for (let matchIndex = 0; matchIndex < currentRoundMatches.length; matchIndex++) {
       const completedMatch = currentRoundMatches[matchIndex];
-      
+
       if (!completedMatch.winner_id) {
         console.warn(`⚠️ Match ${completedMatch.match_name} (${completedMatch._id}) is completed but has no winner_id`);
         continue;
@@ -535,17 +532,17 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
         // Extract player_id or team_id - handle both populated and unpopulated cases
         let playerId = null;
         let teamId = null;
-        
+
         if (winnerParticipant.player_id) {
           // If populated, get _id, otherwise it's already an ObjectId
           playerId = winnerParticipant.player_id._id || winnerParticipant.player_id;
         }
-        
+
         if (winnerParticipant.team_id) {
           // If populated, get _id, otherwise it's already an ObjectId
           teamId = winnerParticipant.team_id._id || winnerParticipant.team_id;
         }
-        
+
         // Ensure we have valid ObjectIds
         if (playerId && !mongoose.Types.ObjectId.isValid(playerId)) {
           console.warn(`⚠️ Invalid player_id for winner: ${playerId}`);
@@ -555,19 +552,19 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
           console.warn(`⚠️ Invalid team_id for winner: ${teamId}`);
           teamId = null;
         }
-        
+
         winners.push({
           player_id: playerId,
           team_id: teamId,
           participant_type: winnerParticipant.participant_type
         });
-        
-        const winnerName = playerId 
-          ? (winnerParticipant.player_id?.user_id ? 
-              `${winnerParticipant.player_id.user_id.first_name || ''} ${winnerParticipant.player_id.user_id.last_name || ''}`.trim() 
-              : 'Player') 
+
+        const winnerName = playerId
+          ? (winnerParticipant.player_id?.user_id ?
+            `${winnerParticipant.player_id.user_id.first_name || ''} ${winnerParticipant.player_id.user_id.last_name || ''}`.trim()
+            : 'Player')
           : (teamId ? (winnerParticipant.team_id?.team_name || 'Team') : 'Unknown');
-        
+
         console.log(`✅ Found winner #${matchIndex + 1} from ${completedMatch.match_name}: ${winnerName} (${winnerParticipant.participant_type})`);
       } else {
         console.warn(`⚠️ Could not find winner participant for match ${completedMatch._id} with winner_id ${completedMatch.winner_id}`);
@@ -585,7 +582,7 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
     // Get category and tournament info
     const category = await TournamentCategory.findById(categoryObjectId)
       .populate('tournament_id');
-    
+
     if (!category) {
       console.error(`❌ Category ${categoryId} not found`);
       return;
@@ -604,46 +601,123 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
     const nextRoundMatches = [];
     let matchNumber = 1;
 
-    // Pair winners sequentially: 
+    // Pair winners sequentially:
     // - Match 1 winner vs Match 2 winner → Next Round Match 1
     // - Match 3 winner vs Match 4 winner → Next Round Match 2
     // - Match 5 winner vs Bye (if odd number) → Next Round Match 3
     // This ensures proper bracket progression
+    // Pre-fetch all participants for existing next round matches to facilitate lookup
+    const existingNextRoundMatchIds = existingNextRoundMatches.map(m => m._id);
+    const existingNextRoundParticipants = await MatchParticipant.find({
+      match_id: { $in: existingNextRoundMatchIds }
+    }).populate('player_id').populate('team_id');
+
     for (let i = 0; i < winners.length; i += 2) {
-      const participant1 = winners[i];      // Winner from match (i+1) - e.g., Match 1, Match 3, Match 5
-      const participant2 = winners[i + 1] || null; // Winner from match (i+2) - e.g., Match 2, Match 4, or null (Bye)
-      
+      const participant1 = winners[i];      // Winner from match (i+1)
+      const participant2 = winners[i + 1] || null; // Winner from match (i+2)
+
       const match1Index = i;
       const match2Index = i + 1;
       const match1Name = currentRoundMatches[match1Index]?.match_name || `Match ${match1Index + 1}`;
       const match2Name = currentRoundMatches[match2Index]?.match_name || (match2Index < currentRoundMatches.length ? `Match ${match2Index + 1}` : 'Bye');
-      console.log(`🔗 Pairing for ${nextRound} ${Math.floor(i/2) + 1}: Winner from ${match1Name} vs Winner from ${match2Name}`);
+      console.log(`🔗 Pairing for ${nextRound} ${Math.floor(i / 2) + 1}: Winner from ${match1Name} vs Winner from ${match2Name}`);
 
-      let targetMatch;
-      
-      if (shouldUpdateExisting && existingNextRoundMatches[matchNumber - 1]) {
-        // Update existing match
-        targetMatch = existingNextRoundMatches[matchNumber - 1];
-        console.log(`🔄 Updating existing match ${targetMatch._id} with winners`);
-        
-        // Delete existing participants (if any)
-        await MatchParticipant.deleteMany({ match_id: targetMatch._id });
-        
-        // Update match scheduled time if needed
-        const scheduledTime = new Date(latestCompletionTime);
-        scheduledTime.setMinutes(scheduledTime.getMinutes() + 30 + (matchNumber - 1) * 30);
-        targetMatch.scheduled_time = scheduledTime;
-        targetMatch.status = 'Scheduled';
-        await targetMatch.save();
+      let targetMatch = null;
+      let p1ExistingMatchId = null;
+      let p2ExistingMatchId = null;
+
+      // Helper to find match ID for a participant in next round
+      const findMatchIdForParticipant = (p) => {
+        if (!p) return null;
+        const found = existingNextRoundParticipants.find(ep => {
+          if (p.participant_type === 'Individual' && ep.player_id && p.player_id) {
+            const epId = ep.player_id._id || ep.player_id;
+            const pId = p.player_id;
+            return String(epId) === String(pId);
+          }
+          if (p.participant_type === 'Team' && ep.team_id && p.team_id) {
+            const epId = ep.team_id._id || ep.team_id;
+            const pId = p.team_id;
+            return String(epId) === String(pId);
+          }
+          return false;
+        });
+        return found ? found.match_id : null;
+      };
+
+      if (participant1) p1ExistingMatchId = findMatchIdForParticipant(participant1);
+      if (participant2) p2ExistingMatchId = findMatchIdForParticipant(participant2);
+
+      // Determine target match based on existing placements
+      if (p1ExistingMatchId && p2ExistingMatchId) {
+        if (String(p1ExistingMatchId) === String(p2ExistingMatchId)) {
+          // Both already in the same match - Perfect
+          targetMatch = existingNextRoundMatches.find(m => String(m._id) === String(p1ExistingMatchId));
+          console.log(`ℹ️ Winners already paired in existing match ${targetMatch._id}`);
+        } else {
+          // In different matches - Conflict! (This shouldn't happen in normal flow, maybe skip?)
+          console.warn(`⚠️ Conflict: Winners are in different existing matches (${p1ExistingMatchId} vs ${p2ExistingMatchId}). Skipping pairing.`);
+          continue;
+        }
+      } else if (p1ExistingMatchId) {
+        // P1 is in a match, P2 is not. Add P2 to P1's match.
+        targetMatch = existingNextRoundMatches.find(m => String(m._id) === String(p1ExistingMatchId));
+        console.log(`ℹ️ Winner 1 found in match ${targetMatch._id}, adding Winner 2`);
+      } else if (p2ExistingMatchId) {
+        // P2 is in a match, P1 is not. Add P1 to P2's match.
+        targetMatch = existingNextRoundMatches.find(m => String(m._id) === String(p2ExistingMatchId));
+        console.log(`ℹ️ Winner 2 found in match ${targetMatch._id}, adding Winner 1`);
+      } else {
+        // Neither are in a match.
+        // Try to find an empty existing match (placeholder) matching the expected name
+        const expectedMatchName = `${category.category_name} - ${nextRound} ${matchNumber}`;
+        const existingMatchByName = existingNextRoundMatches.find(m => m.match_name === expectedMatchName);
+
+        // Also check by index if we are in "update all" mode (no participants in round yet)
+        const existingMatchByIndex = existingNextRoundMatches[matchNumber - 1];
+
+        // Check if the candidate match is truly empty/available
+        const isMatchOccupied = (matchId) => {
+          return existingNextRoundParticipants.some(p => String(p.match_id) === String(matchId));
+        };
+
+        if (existingMatchByName && !isMatchOccupied(existingMatchByName._id)) {
+          targetMatch = existingMatchByName;
+          console.log(`🔄 Using existing empty match by name: ${targetMatch.match_name}`);
+        } else if (!existingMatchByName && shouldUpdateExisting && existingMatchByIndex && !isMatchOccupied(existingMatchByIndex._id)) {
+          targetMatch = existingMatchByIndex;
+          console.log(`🔄 Using existing empty match by index: ${targetMatch.match_name}`);
+        }
+      }
+
+      if (targetMatch) {
+        // Use existing match. Check if we need to add participants.
+        // We do NOT delete all participants anymore, we only add missing ones.
+
+        // Update status/time if it was a placeholder
+        if (targetMatch.status === 'Scheduled' || targetMatch.status === 'Pending') {
+          const scheduledTime = new Date(latestCompletionTime);
+          scheduledTime.setMinutes(scheduledTime.getMinutes() + 30 + (matchNumber - 1) * 30);
+          targetMatch.scheduled_time = scheduledTime;
+          targetMatch.status = 'Scheduled';
+
+          // Fix: Force 'Final 1' naming for the final match
+          if (nextRound === 'Final' && matchNumber === 1) {
+            targetMatch.match_name = `${category.category_name} - Final 1`;
+          }
+
+          await targetMatch.save();
+        }
       } else {
         // Create new match
         const scheduledTime = new Date(latestCompletionTime);
         scheduledTime.setMinutes(scheduledTime.getMinutes() + 30 + (matchNumber - 1) * 30);
+        const expectedMatchName = `${category.category_name} - ${nextRound} ${matchNumber}`;
 
         targetMatch = await Match.create({
           tournament_id: tournamentId,
           category_id: categoryObjectId,
-          match_name: `${category.category_name} - ${nextRound} ${matchNumber}`,
+          match_name: expectedMatchName,
           match_type: category.category_type,
           match_level: nextRound,
           scheduled_time: scheduledTime,
@@ -653,64 +727,41 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
         console.log(`✅ Created new match ${targetMatch._id} for ${nextRound}`);
       }
 
-      // Create participants for the match
-      if (participant1) {
-        const participant1Data = {
-          match_id: targetMatch._id,
-          participant_type: participant1.participant_type,
-          position: 'Player 1'
-        };
-        
-        if (participant1.participant_type === 'Individual' && participant1.player_id) {
-          // Ensure player_id is a valid ObjectId
-          const playerId = mongoose.Types.ObjectId.isValid(participant1.player_id) 
-            ? new mongoose.Types.ObjectId(participant1.player_id) 
-            : participant1.player_id;
-          participant1Data.player_id = playerId;
-          participant1Data.team_id = null;
-          console.log(`📝 Setting participant 1 player_id: ${playerId}`);
-        } else if (participant1.participant_type === 'Team' && participant1.team_id) {
-          // Ensure team_id is a valid ObjectId
-          const teamId = mongoose.Types.ObjectId.isValid(participant1.team_id) 
-            ? new mongoose.Types.ObjectId(participant1.team_id) 
-            : participant1.team_id;
-          participant1Data.team_id = teamId;
-          participant1Data.player_id = null;
-          console.log(`📝 Setting participant 1 team_id: ${teamId}`);
-        }
-        
-        const createdParticipant1 = await MatchParticipant.create(participant1Data);
-        console.log(`✅ Created participant 1 for match ${targetMatch._id}: ${participant1.participant_type} - ID: ${createdParticipant1._id}`);
-      }
+      // Ensure participants are added to the match
+      const ensureParticipant = async (participant, position) => {
+        if (!participant) return;
 
-      if (participant2) {
-        const participant2Data = {
+        // Check if already in this match
+        const alreadyInMatch = existingNextRoundParticipants.some(ep => {
+          if (String(ep.match_id) !== String(targetMatch._id)) return false;
+          if (participant.participant_type === 'Individual') {
+            return String(ep.player_id?._id || ep.player_id) === String(participant.player_id);
+          }
+          return String(ep.team_id?._id || ep.team_id) === String(participant.team_id);
+        });
+
+        if (alreadyInMatch) return;
+
+        const participantData = {
           match_id: targetMatch._id,
-          participant_type: participant2.participant_type,
-          position: 'Player 2'
+          participant_type: participant.participant_type,
+          position: position
         };
-        
-        if (participant2.participant_type === 'Individual' && participant2.player_id) {
-          // Ensure player_id is a valid ObjectId
-          const playerId = mongoose.Types.ObjectId.isValid(participant2.player_id) 
-            ? new mongoose.Types.ObjectId(participant2.player_id) 
-            : participant2.player_id;
-          participant2Data.player_id = playerId;
-          participant2Data.team_id = null;
-          console.log(`📝 Setting participant 2 player_id: ${playerId}`);
-        } else if (participant2.participant_type === 'Team' && participant2.team_id) {
-          // Ensure team_id is a valid ObjectId
-          const teamId = mongoose.Types.ObjectId.isValid(participant2.team_id) 
-            ? new mongoose.Types.ObjectId(participant2.team_id) 
-            : participant2.team_id;
-          participant2Data.team_id = teamId;
-          participant2Data.player_id = null;
-          console.log(`📝 Setting participant 2 team_id: ${teamId}`);
+
+        if (participant.participant_type === 'Individual') {
+          participantData.player_id = participant.player_id;
+          participantData.team_id = null;
+        } else {
+          participantData.team_id = participant.team_id;
+          participantData.player_id = null;
         }
-        
-        const createdParticipant2 = await MatchParticipant.create(participant2Data);
-        console.log(`✅ Created participant 2 for match ${targetMatch._id}: ${participant2.participant_type} - ID: ${createdParticipant2._id}`);
-      }
+
+        await MatchParticipant.create(participantData);
+        console.log(`✅ Added participant to match ${targetMatch._id}`);
+      };
+
+      await ensureParticipant(participant1, 'Player 1');
+      await ensureParticipant(participant2, 'Player 2');
 
       nextRoundMatches.push(targetMatch);
       matchNumber++;
@@ -765,7 +816,7 @@ const checkAndGenerateNextRound = async (categoryId, currentRoundLevel) => {
       console.log(`   ${nextRound} ${matchNum}: ${p1Name} vs ${p2Name}`);
     }
     console.log(`✅ ========================================\n`);
-    
+
     // Emit real-time update if socket.io is available
     try {
       const { getIO } = require('../utils/socket');
@@ -805,7 +856,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
   try {
     const match = await Match.findById(req.params.id)
       .populate('category_id');
-    
+
     if (!match) {
       return res.status(404).json({
         success: false,
@@ -839,7 +890,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
     const participantScores = {};
     participants.forEach(participant => {
       const participantId = participant._id.toString();
-      const participantScoresList = scores.filter(s => 
+      const participantScoresList = scores.filter(s =>
         s.participant_id?.toString() === participantId
       );
 
@@ -860,7 +911,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
         totalKeikoku += score.keikoku || 0;
         totalHansokuChui += score.hansoku_chui || 0;
         totalHansoku += score.hansoku || 0;
-        
+
         if (score.scored_at && (!firstScoreTime || score.scored_at < firstScoreTime)) {
           firstScoreTime = score.scored_at;
         }
@@ -868,7 +919,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
 
       // Calculate points: Yuko (1), Waza-ari (2), Ippon (3)
       const points = (totalYuko * 1) + (totalWazaAri * 2) + (totalIppon * 3);
-      
+
       participantScores[participantId] = {
         participant,
         totalPoints: points,
@@ -888,7 +939,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
     const participantIds = Object.keys(participantScores);
     const participant1Id = participantIds[0];
     const participant2Id = participantIds[1];
-    
+
     const participant1Data = participantScores[participant1Id];
     const participant2Data = participantScores[participant2Id];
 
@@ -896,8 +947,8 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
     if (participant1Data.disqualified) {
       // Participant 2 wins
       const winnerParticipant = participant2Data.participant;
-      const winnerId = winnerParticipant.participant_type === 'Individual' 
-        ? winnerParticipant.player_id 
+      const winnerId = winnerParticipant.participant_type === 'Individual'
+        ? winnerParticipant.player_id
         : winnerParticipant.team_id;
 
       match.winner_id = winnerId;
@@ -916,7 +967,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
       );
 
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
 
@@ -937,8 +988,8 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
     if (participant2Data.disqualified) {
       // Participant 1 wins
       const winnerParticipant = participant1Data.participant;
-      const winnerId = winnerParticipant.participant_type === 'Individual' 
-        ? winnerParticipant.player_id 
+      const winnerId = winnerParticipant.participant_type === 'Individual'
+        ? winnerParticipant.player_id
         : winnerParticipant.team_id;
 
       match.winner_id = winnerId;
@@ -957,7 +1008,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
       );
 
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
 
@@ -981,11 +1032,11 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
 
     // 8-point difference rule (Senshu) - match stops
     if (Math.abs(participant1FinalScore - participant2FinalScore) >= 8) {
-      const winnerParticipant = participant1FinalScore > participant2FinalScore 
-        ? participant1Data.participant 
+      const winnerParticipant = participant1FinalScore > participant2FinalScore
+        ? participant1Data.participant
         : participant2Data.participant;
-      const winnerId = winnerParticipant.participant_type === 'Individual' 
-        ? winnerParticipant.player_id 
+      const winnerId = winnerParticipant.participant_type === 'Individual'
+        ? winnerParticipant.player_id
         : winnerParticipant.team_id;
 
       match.winner_id = winnerId;
@@ -1004,7 +1055,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
       );
 
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
 
@@ -1025,8 +1076,8 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
     // Higher score wins
     if (participant1FinalScore > participant2FinalScore) {
       const winnerParticipant = participant1Data.participant;
-      const winnerId = winnerParticipant.participant_type === 'Individual' 
-        ? winnerParticipant.player_id 
+      const winnerId = winnerParticipant.participant_type === 'Individual'
+        ? winnerParticipant.player_id
         : winnerParticipant.team_id;
 
       match.winner_id = winnerId;
@@ -1045,7 +1096,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
       );
 
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
 
@@ -1065,8 +1116,8 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
 
     if (participant2FinalScore > participant1FinalScore) {
       const winnerParticipant = participant2Data.participant;
-      const winnerId = winnerParticipant.participant_type === 'Individual' 
-        ? winnerParticipant.player_id 
+      const winnerId = winnerParticipant.participant_type === 'Individual'
+        ? winnerParticipant.player_id
         : winnerParticipant.team_id;
 
       match.winner_id = winnerId;
@@ -1085,7 +1136,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
       );
 
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
 
@@ -1107,11 +1158,11 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
     if (participant1FinalScore === participant2FinalScore) {
       const participant1FirstTime = participant1Data.firstScoreTime;
       const participant2FirstTime = participant2Data.firstScoreTime;
-      
+
       let winnerParticipant;
       if (participant1FirstTime && participant2FirstTime) {
-        winnerParticipant = participant1FirstTime < participant2FirstTime 
-          ? participant1Data.participant 
+        winnerParticipant = participant1FirstTime < participant2FirstTime
+          ? participant1Data.participant
           : participant2Data.participant;
       } else if (participant1FirstTime) {
         winnerParticipant = participant1Data.participant;
@@ -1122,8 +1173,8 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
         winnerParticipant = participant1Data.participant;
       }
 
-      const winnerId = winnerParticipant.participant_type === 'Individual' 
-        ? winnerParticipant.player_id 
+      const winnerId = winnerParticipant.participant_type === 'Individual'
+        ? winnerParticipant.player_id
         : winnerParticipant.team_id;
 
       match.winner_id = winnerId;
@@ -1142,7 +1193,7 @@ const calculateKumiteMatchWinner = async (req, res, next) => {
       );
 
       // Check and generate next round if needed (async, don't wait)
-      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err => 
+      checkAndGenerateNextRound(match.category_id, match.match_level).catch(err =>
         console.error('Error generating next round:', err)
       );
 
@@ -1183,7 +1234,7 @@ const generateNextRound = async (req, res, next) => {
       const TournamentCategory = require('../models/TournamentCategory');
       const category = await TournamentCategory.findById(category_id)
         .populate('tournament_id');
-      
+
       if (!category) {
         return res.status(404).json({
           success: false,
